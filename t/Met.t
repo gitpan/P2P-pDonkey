@@ -1,11 +1,17 @@
 #########################
 
 use Test;
-BEGIN { plan tests => 1 };
+BEGIN { plan tests => 4 };
 
 use P2P::pDonkey::Met ':all';
 
-ok(1); # If we made it this far, we're ok.
-
 #########################
+my $p = readPartMet('t/23.part.met');
+ok($p);
+$p = readServerMet('t/server.met');
+ok($p);
+$p = readPrefMet('t/pref.met');
+ok($p);
+$p = readKnownMet('t/known.met');
+ok($p);
 

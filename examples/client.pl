@@ -1,6 +1,6 @@
 #! /usr/bin/perl -w
 #
-# Copyright (c) 2002 Alexey Klimkin <klimkin@mail.ru>.
+# Copyright (c) 2003 Alexey klimkin <klimkin at cpan.org>.
 # All rights reserved.
 # This program is free software; you can redistribute it and/or
 # modify it under the same terms as Perl itself.
@@ -28,7 +28,7 @@ my ($debug, $dump) = (1, 0);
 my %options = (
               Nickname      => 'Muxer',
               Version       => 60,
-              incomingPort  => 4662,
+              incomingPort  => 4665,
               adminDoorPort => 4663,
               adminName     => 'Muxer',
               adminPass     => 'qwert',
@@ -57,8 +57,8 @@ my $ServerList = readServerMet('ss.met');
 my $Downloads = LoadPartMets($options{temp}); # mapping hash->part
 my %Sources; # mapping addr->hash->part
 
-#my ($saddr, $port) = ('176.16.4.244', 4661);
-my ($saddr, $port) = ('212.202.199.129', 4661);
+my ($saddr, $port) = ('176.16.4.244', 4661);
+#my ($saddr, $port) = ('212.202.199.129', 4661);
 #my ($saddr, $port) = ('217.224.233.158', 4661);
 #my ($saddr, $port) = ('80.130.53.117', 4661);
 

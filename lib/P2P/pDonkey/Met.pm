@@ -1,6 +1,6 @@
 # P2P::pDonkey::Met.pm
 #
-# Copyright (c) 2002 Alexey Klimkin <klimkin@mail.ru>. 
+# Copyright (c) 2003 Alexey klimkin <klimkin at cpan.org>. 
 # All rights reserved.
 # This program is free software; you can redistribute it and/or
 # modify it under the same terms as Perl itself.
@@ -12,6 +12,8 @@ use strict;
 use warnings;
 
 require Exporter;
+
+our $VERSION = '0.04';
 
 our @ISA = qw(Exporter);
 
@@ -63,7 +65,6 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw(
 	
 );
-our $VERSION = '0.01';
 
 use Carp;
 use Data::Hexdumper;
@@ -75,7 +76,8 @@ my $debug = 0;
 # Preloaded methods go here.
 
 use constant MT_SERVERMET   => 0x0e;
-use constant MT_PARTMET     => 0xe0;
+use constant MT_PARTMET     => 0xe1;
+use constant MT_PARTMET_OLD => 0xe0;
 use constant MT_KNOWNMET    => 0x0e;
 
 
@@ -84,12 +86,16 @@ my $readFile = sub {
     my ($handle, $buf);
     my $rs = $/;
     undef $/;
-    open($handle, "<$fname") or warn "Can't open '$fname': $!\n" and return;
+    open($handle, "<$fname") 
+        or warn "Can't open '$fname': $!\n" 
+        and $/ = $rs 
+        and return;
     binmode($handle);
     if ($tag) {
         if (read($handle, $buf, 1) != 1 || unpack('C',$buf) != $tag) {
             warn "File '$fname' without tag!\n";
             close($handle);
+            $/ = $rs;
             return;
         }
         $buf .= <$handle>;
@@ -236,7 +242,8 @@ sub writeServerMet {
 # .part.met
 
 sub unpackPartMet {
-    &unpackB == MT_PARTMET or return;
+    my $v = &unpackB;
+    $v == MT_PARTMET || $v == MT_PARTMET_OLD or return;
     return &unpackFileInfo;
 }
 sub packPartMet {
@@ -249,7 +256,9 @@ sub printPartMet {
 sub readPartMet {
     my ($fname) = @_;
     my ($off, $buf, $res);
-    $buf = &$readFile($fname, MT_PARTMET) or return;
+    $buf = &$readFile($fname, MT_PARTMET) 
+        or $buf = &$readFile($fname, MT_PARTMET_OLD)
+        or return;
     $off = 0;
     $res = unpackPartMet($$buf, $off);
     $res->{Path} = $fname;

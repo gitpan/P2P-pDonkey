@@ -1,6 +1,6 @@
 # P2P::pDonkey::Util.pm
 #
-# Copyright (c) 2002 Alexey Klimkin <klimkin@mail.ru>. 
+# Copyright (c) 2003 Alexey klimkin <klimkin at cpan.org>. 
 # All rights reserved.
 # This program is free software; you can redistribute it and/or
 # modify it under the same terms as Perl itself.
@@ -13,6 +13,8 @@ use warnings;
 
 require Exporter;
 
+our $VERSION = '0.04';
+
 our @ISA = qw(Exporter);
 
 our %EXPORT_TAGS = ( 'all' => [ qw(
@@ -24,8 +26,6 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw(
 	
 );
-our $VERSION = '0.01';
-
 
 # Preloaded methods go here.
 

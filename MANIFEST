@@ -1,6 +1,6 @@
 Changes
-doc/eDonkey-clients
-doc/eDonkey-protocol-0.5
+doc/eDonkey-soft
+doc/eDonkey-protocol
 examples/server.met
 examples/client.pl
 examples/fileinfo.pl
@@ -29,3 +29,8 @@ t/Meta.t
 t/Packet.t
 t/Util.t
 t/Met.t
+t/224.avi
+t/23.part.met
+t/known.met
+t/pref.met
+t/server.met

@@ -1,6 +1,6 @@
 # P2P::pDonkey::Meta.pm
 #
-# Copyright (c) 2002 Alexey Klimkin <klimkin@mail.ru>. 
+# Copyright (c) 2003 Alexey klimkin <klimkin at cpan.org>. 
 # All rights reserved.
 # This program is free software; you can redistribute it and/or
 # modify it under the same terms as Perl itself.
@@ -12,6 +12,8 @@ use strict;
 use warnings;
 
 require Exporter;
+
+our $VERSION = '0.04';
 
 our @ISA = qw(Exporter);
 
@@ -74,7 +76,7 @@ our %EXPORT_TAGS =
                 packFileInfo unpackFileInfo makeFileInfo
                 packFileInfoList unpackFileInfoList makeFileInfoList
 
-                packSearchQuery unpackSearchQuery matchSearchQuery
+                packSearchQuery unpackSearchQuery matchSearchQuery makeSQLExpr
 
                 packAddr unpackAddr printAddr idAddr
                 packAddrList unpackAddrList 
@@ -101,7 +103,6 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw(
 	
 );
-our $VERSION = '0.01';
 
 
 # Preloaded methods go here.
@@ -115,7 +116,7 @@ use File::Find;
 use POSIX qw( ceil );
 use P2P::pDonkey::Util qw( ip2addr );
 
-use Video::Info;
+#use Video::Info;
 
 my $debug = 0;
 
@@ -188,7 +189,6 @@ use constant TT_TEMPFILE        => 0x12;
 use constant TT_PRIORITY        => 0x13;
 use constant TT_STATUS          => 0x14;
 use constant TT_AVAILABILITY    => 0x15;
-use constant _TT_LAST           => 0x16;
 $MetaTagName[TT_NAME]           = 'Name';
 $MetaTagName[TT_SIZE]           = 'Size';
 $MetaTagName[TT_TYPE]           = 'Type';
@@ -367,7 +367,7 @@ sub unpackMetaTagName {
     ($len = length $name) or return;   # length is not 0
     $st = ord $name;
 
-    if ($st < _TT_LAST) {   # special tag
+#    if ($st < _TT_LAST) {   # special tag
         if ($st == TT_GAPEND || $st == TT_GAPSTART) {
             $name = unpack('xa*', $name);
         } elsif ($len == 1) {
@@ -376,9 +376,9 @@ sub unpackMetaTagName {
         } else {
             $st = TT_UNDEFINED;
         }
-    } else {
-        $st = TT_UNDEFINED;
-    }
+#    } else {
+#        $st = TT_UNDEFINED;
+#    }
     return {Type => $st, Name => $name};
 }
 sub packMetaTagName {
@@ -509,7 +509,7 @@ sub MetaListU2MetaList {
     return [values %{$_[0]}];
 }
 
-# client or server info
+# client, server or search result info
 sub unpackInfo {
     my ($hash, $ip, $port, $meta);
     defined($hash = &unpackHash) or return;
@@ -815,6 +815,72 @@ sub packSearchQuery {
     }
 }
 
+sub makeSQLExpr {
+    my ($q, $ok, $fields) = @_;
+    my $t = $q->{Type};
+    my $nm;
+
+    if ($t == ST_COMBINE) {
+        my $op = $q->{Op};
+
+        if ($op == ST_AND) {
+            return makeSQLExpr($q->{Q1}, $ok, $fields) . ' AND ' . makeSQLExpr($q->{Q2}, $ok, $fields);
+        } elsif ($op == ST_OR) {
+            return '(' . makeSQLExpr($q->{Q1}, $ok, $fields) . ' OR ' . makeSQLExpr($q->{Q2}, $ok, $fields) . ')';
+        } elsif ($op == ST_ANDNOT) {
+            return makeSQLExpr($q->{Q1}, $ok, $fields) . ' AND NOT ' . makeSQLExpr($q->{Q2}, $ok, $fields);
+        } else {
+            $$ok = 0;
+            return '';
+        }
+
+    } elsif ($t == ST_NAME) {
+        my $nm = MetaTagName(TT_NAME);
+        my $ft = $fields->{$nm};
+        if (defined $ft && $ft == VT_STRING) {
+            my $qval = $q->{Value};
+            $qval =~ s/'/''/g;
+            return "$nm LIKE '$qval'";
+        } else {
+            $$ok = 0;
+            return '';
+        }
+
+    } elsif ($t == ST_META) {
+        my $nm = $q->{MetaName}->{Name};
+        my $ft = $fields->{$nm};
+        if (defined $ft && $ft == VT_STRING) {
+            my $qval = $q->{Value};
+            $qval =~ s/'/''/g;
+            return "$nm LIKE '$qval'";
+        } else {
+            $$ok = 0;
+            return '';
+        }
+
+    } elsif ($t == ST_MINMAX) {
+        my $nm = $q->{MetaName}->{Name};
+        my $ft = $fields->{$nm};
+        if (defined $ft && $ft == VT_INTEGER) {
+            if ($q->{Compare} == ST_MIN) {
+                return "$nm >= $q->{Value}";
+            } elsif ($q->{Compare} == ST_MAX) {
+                return "$nm <= $q->{Value}";
+            } else {
+                $$ok = 0;
+                return '';
+            }
+        } else {
+            $$ok = 0;
+            return '';
+        }
+
+    } else {
+        $$ok = 0;
+        return '';
+    }
+}
+
 sub matchSearchQuery {
     my ($q, $i) = @_;
     my $t = $q->{Type};
@@ -878,7 +944,7 @@ sub unpackAddrList {
     return \@res;
 }
 sub packAddrList {
-    my ($l) = @_;
+    my $l = shift;
     my $n = @$l / 2;
     return pack('C', $n) . pack('LS' x $n, @$l);
 }

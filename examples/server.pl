@@ -1,6 +1,6 @@
 #! /usr/bin/perl -w
 #
-# Copyright (c) 2002 Alexey Klimkin <klimkin@mail.ru>.
+# Copyright (c) 2003 Alexey klimkin <klimkin at cpan.org>.
 # All rights reserved.
 # This program is free software; you can redistribute it and/or
 # modify it under the same terms as Perl itself.
@@ -33,7 +33,7 @@ END
 
 
 my @procTable;
-$procTable[PT_HELLO]        = \&processHello;
+$procTable[PT_HELLOSERVER]  = \&processHello;
 $procTable[PT_OFFERFILES]   = \&processOfferFiles;
 $procTable[PT_SEARCHFILE]   = \&processSearchFile;
 $procTable[PT_GETSOURCES]   = \&processGetSources;
@@ -84,13 +84,13 @@ sub processGetServerList {
 
 sub processOfferFiles {
     my ($conn, $d) = @_;
-    AddShared($conn, $d);
+    AddFiles($conn, $d);
     $server->Queue(undef, PT_SERVERSTATUS, $server->{nUsers}, $server->{nFiles});
 }
 
 sub processSearchFile {
     my ($conn, $d) = @_;
-    $server->Queue($conn, PT_SEARCHFILERES, FindFiles($conn, $d));
+    $server->Queue($conn, PT_SEARCHFILERES, SearchFiles($conn, $d));
 }
 
 sub processGetSources {
@@ -102,7 +102,7 @@ sub processGetSources {
 my %shared;
 my %sources;
 
-sub AddShared {
+sub AddFiles {
     my ($conn, $l) = @_;
     my ($meta, $hash, $store, $line);
 
@@ -130,7 +130,7 @@ sub AddShared {
     }
 }
 
-sub FindFiles {
+sub SearchFiles {
     my ($conn, $d) = @_;
     my (@found, $hash, $files);
 

@@ -1,4 +1,4 @@
-P2P::pDonkey version 0.03
+P2P::pDonkey version 0.04
 =========================
 
 pDonkey is the set of tools, written in perl, for manipulating 
@@ -46,7 +46,7 @@ DEPENDENCIES
 
 COPYRIGHT AND LICENCE
 
-    Copyright (c) 2002 Alexey Klimkin <klimkin@mail.ru>. 
+    Copyright (c) 2003 Alexey klimkin <klimkin at cpan.org>. 
     All rights reserved.
     This program is free software; you can redistribute it and/or
     modify it under the same terms as Perl itself.

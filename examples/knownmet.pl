@@ -1,6 +1,6 @@
-#! /usr/bin/perl -w
+#! /usr/bin/perl
 #
-# Copyright (c) 2002 Alexey Klimkin <klimkin@mail.ru>.
+# Copyright (c) 2003 Alexey klimkin <klimkin at cpan.org>.
 # All rights reserved.
 # This program is free software; you can redistribute it and/or
 # modify it under the same terms as Perl itself.

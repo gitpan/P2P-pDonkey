@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2002 Alexey Klimkin <klimkin@mail.ru>.
+# Copyright (c) 2003 Alexey klimkin <klimkin at cpan.org>.
 # All rights reserved.
 # This program is free software; you can redistribute it and/or
 # modify it under the same terms as Perl itself.
@@ -198,7 +198,7 @@ sub Queue {
     $dlen += SZ_TCP_HEADER;
 
     my $class;
-    if ($conn eq 'Client' || $conn eq 'Server' || $conn eq 'Admin') {
+    if ($conn && ($conn eq 'Client' || $conn eq 'Server' || $conn eq 'Admin')) {
         $class = $conn;
         $conn = undef;
     }
@@ -272,11 +272,11 @@ sub MainLoop {
 
             if ($conn->{State} == CS_PROXY) {
                 my $proxy_req = "CONNECT $conn->{Addr}:$conn->{Port} HTTP/1.1\n"
-#                    . "Pragma: no-cache\n"
-#                    . "Cache-Control: no-cache\n"
-#                    . "Connection: Keep-Alive\n"
-#                    . "Proxy-Connection: Keep-Alive\n"
-#                    . "User-Agent: Mozilla/4.0 (compatible; MSIE 5.01; Windows NT; Hotbar 2.0)\n"
+                    . "Pragma: no-cache\n"
+                    . "Cache-Control: no-cache\n"
+                    . "Connection: Keep-Alive\n"
+                    . "Proxy-Connection: Keep-Alive\n"
+                    . "User-Agent: Mozilla/4.0 (compatible; MSIE 5.01; Windows NT; Hotbar 2.0)\n"
                     . "\n";
                 $len = syswrite($h, $proxy_req, length $proxy_req);
                 if (!$len || $len != length $proxy_req) {

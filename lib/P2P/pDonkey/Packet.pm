@@ -1,6 +1,6 @@
 # P2P::pDonkey::Packet.pm
 #
-# Copyright (c) 2002 Alexey Klimkin <klimkin@mail.ru>. 
+# Copyright (c) 2003 Alexey Klimkin <klimkin at cpan.org>. 
 # All rights reserved.
 # This program is free software; you can redistribute it and/or
 # modify it under the same terms as Perl itself.
@@ -12,6 +12,8 @@ use strict;
 use warnings;
 
 require Exporter;
+
+our $VERSION = '0.04';
 
 our @ISA = qw(Exporter);
 
@@ -45,7 +47,7 @@ our %EXPORT_TAGS = ( 'all' => [ qw(
     PT_CBFAIL
     PT_SERVERMESSAGE
     PT_IDCHANGE
-    PT_SERVERINFO
+    PT_SERVERINFODATA
     PT_FOUNDSOURCES
     PT_SEARCHUSERRES
     PT_SENDINGPART
@@ -78,7 +80,7 @@ our %EXPORT_TAGS = ( 'all' => [ qw(
     PT_UDP_NEWSERVER
     PT_UDP_SERVERLIST
     PT_UDP_SERVERINFO
-    PT_UDP_SERVERINFOREQ
+    PT_UDP_GETSERVERINFO
     PT_UDP_GETSERVERLIST
 
     PT_ADM_LOGIN
@@ -146,7 +148,6 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw(
 	
 );
-our $VERSION = '0.03';
 
 
 # Preloaded methods go here.
@@ -158,13 +159,14 @@ use P2P::pDonkey::Meta ':all';
 use constant PT_TEST => 0x3f;
 
 # --- packet headers
-use constant SZ_UDP_HEADER          => 1;       # 1 - header marker
-use constant SZ_TCP_HEADER          => 5;       # 1 - header marker, 4 - packet length
+use constant SZ_UDP_HEADER          => 1;       # 1 (header marker)
+use constant SZ_TCP_HEADER          => 5;       # 1 (header marker) + 4 (packet length)
 # --- packet types
 use constant PT_HEADER              => 0xe3;
-use constant PT_HELLO               => 0x01;    # FIXME!!! 2 hello packets!!!
-use constant PT_HELLOSERVER         => 0x01;
-use constant PT_HELLOCLIENT         => 0x01;
+use constant PT_HELLO               => 0x01;    # 2 hello packets!!!
+use constant PT_HELLOSERVER         => 1.1;     # uses PT_HELLO
+use constant PT_HELLOCLIENT         => 1.2;     # uses PT_HELLO
+use constant PT_HELLOCLIENT_TAG     => 0x10;
 # unused by server                     0x02 - 0x04
 use constant PT_BADPROTOCOL         => 0x05;
 # client <-> server
@@ -189,7 +191,7 @@ use constant PT_CBFAIL              => 0x36;
 use constant PT_SERVERMESSAGE       => 0x38;
 # unused by server                     0x39 - 0x3f
 use constant PT_IDCHANGE            => 0x40;
-use constant PT_SERVERINFO          => 0x41;
+use constant PT_SERVERINFODATA      => 0x41;
 use constant PT_FOUNDSOURCES        => 0x42;
 use constant PT_SEARCHUSERRES       => 0x43;
 # unused by server                     0x44 - 0x45
@@ -227,7 +229,7 @@ use constant PT_UDP_CBFAIL          => 0x9e;
 # unused by server                     0x9f
 use constant PT_UDP_NEWSERVER       => 0xa0;
 use constant PT_UDP_SERVERLIST      => 0xa1;
-use constant PT_UDP_SERVERINFOREQ   => 0xa2;
+use constant PT_UDP_GETSERVERINFO   => 0xa2;
 use constant PT_UDP_SERVERINFO      => 0xa3;
 use constant PT_UDP_GETSERVERLIST   => 0xa4;
 # CORE <-> GUI
@@ -293,7 +295,8 @@ use constant PT_ADM_GET_CORE_STATUS    => 0xe4;
 my (@PacketTagName, @packTable, @unpackTable);
 
 sub PacketTagName {
-    return $PacketTagName[$_[0]];
+    my $name = $PacketTagName[$_[0]];
+    return $name ? $name : sprintf("Unknown(0x%x)", $_[0]);
 }
 
 # empty body
@@ -307,22 +310,40 @@ my $unpackEmpty = sub {
 sub unpackBody {
     my ($pt) = shift;
     defined($$pt = &unpackB) or return;
-    my $f = $unpackTable[$$pt];
-    defined($f) 
-        or carp("Don't know how to unpack " . sprintf("0x%x",$$pt) . " packets\n")
-           && return;
-    return &$f;
+    my $f;
+    if ($$pt == PT_HELLO) {
+        my $off = $_[1];
+        my $d;
+        $f = $unpackTable[PT_HELLOCLIENT];
+        if (defined($d = &$f)) {
+            $$pt = PT_HELLOCLIENT;
+            return $d;
+        } else {
+            $_[1] = $off;
+            $$pt = PT_HELLOSERVER;
+            $f = $unpackTable[PT_HELLOSERVER];
+            return &$f;
+        }
+    } else {
+        $f = $unpackTable[$$pt];
+        defined($f) 
+            or carp("Don't know how to unpack " . sprintf("0x%x",$$pt) . " packets\n")
+            && return;
+        return &$f;
+    }
 }
 sub packBody {
-    my ($pt) = shift;
-    my $f = $packTable[$pt];
+    my $pt = shift;
+    my $f;
+    defined($f = $packTable[$pt]) or return;
 #    $f or confess "Don't know how to pack ".sprintf("0x%x",$pt)." packets\n";
 #    return pack('Ca*', $pt, &$f);
     return $f ? pack('Ca*', $pt, &$f) : pack('C', $pt);
 }
 
 sub unpackUDPHeader {
-    &unpackB == PT_HEADER or return;
+    my $pth;
+    defined ($pth = &unpackB) and $pth == PT_HEADER or return;
     return 1;
 }
 sub packUDPHeader {
@@ -330,8 +351,8 @@ sub packUDPHeader {
 }
 
 sub unpackTCPHeader {
-    my $len;
-    &unpackB == PT_HEADER or return;
+    my ($len, $pth);
+    defined($pth = &unpackB) and $pth == PT_HEADER or return;
     defined($len = &unpackD) or return;
     return $len;
 }
@@ -348,29 +369,32 @@ $packTable[PT_TEST] = $packEmpty;
 $PacketTagName[PT_HEADER]           = 'Header';
 # -------------------------------------------------------------------
 $PacketTagName[PT_HELLO]            = 'Hello';
-#$unpackTable[PT_HELLO]              = \&unpackInfo;
-#$packTable[PT_HELLO]                = \&packInfo;
 $unpackTable[PT_HELLO]              = sub {
-    my ($d, $hmm);
-    defined($hmm = unpack("x$_[1] C", $_[0])) or return;
-    if ($hmm == PT_HELLOCLIENT) {
-        my $old_off = $_[1]++;
-        $d = &unpackInfo
-            and defined($d->{ServerIP} = &unpackD)
-            and defined($d->{ServerPort} = &unpackW)
-            and return $d;
-        # failed, try Hello server
-        $_[1] = $old_off;
-    }
-    return &unpackInfo;
+    croak('You must specify PT_HELLOSERVER or PT_HELLOCLIENT instead of PT_HELLO.');
 };
 $packTable[PT_HELLO]                = sub {
-    my ($d) = @_;
-    return $d->{ServerIP} 
-           ? packB(0x10) . &packInfo 
-               . packAddr($d->{ServerIP}, $d->{ServerPort})
-           : &packInfo;
+    croak('You must specify PT_HELLOSERVER or PT_HELLOCLIENT instead of PT_HELLO.');
 };
+# -------------------------------------------------------------------
+$PacketTagName[PT_HELLOCLIENT]      = 'Hello client';
+$unpackTable[PT_HELLOCLIENT]        = sub {
+    my ($d, $subtag);
+    defined($subtag = &unpackB)
+        and $subtag == PT_HELLOCLIENT_TAG
+        and defined($d = &unpackInfo)
+        and ($d->{ServerIP}, $d->{ServerPort}) = &unpackAddr
+        or return;
+    return $d;
+};
+$packTable[PT_HELLOCLIENT]          = sub {
+    my ($d) = @_;
+    return packB(PT_HELLOCLIENT_TAG) . &packInfo 
+        . packAddr($d->{ServerIP}, $d->{ServerPort});
+};
+# -------------------------------------------------------------------
+$PacketTagName[PT_HELLOSERVER]      = 'Hello server';
+$unpackTable[PT_HELLOSERVER]        = \&unpackInfo;
+$packTable[PT_HELLOSERVER]          = \&packInfo;
 # -------------------------------------------------------------------
 $PacketTagName[PT_BADPROTOCOL]      = 'Bad protocol';
 $unpackTable[PT_BADPROTOCOL]        = $unpackEmpty;
@@ -454,9 +478,9 @@ $PacketTagName[PT_IDCHANGE]         = 'ID change';
 $unpackTable[PT_IDCHANGE]           = \&unpackD;
 $packTable[PT_IDCHANGE]             = \&packD;
 # -------------------------------------------------------------------
-$PacketTagName[PT_SERVERINFO]       = 'Server info';
-$unpackTable[PT_SERVERINFO]         = \&unpackInfo;
-$packTable[PT_SERVERINFO]           = \&packInfo;
+$PacketTagName[PT_SERVERINFODATA]   = 'Server info data';
+$unpackTable[PT_SERVERINFODATA]     = \&unpackInfo;
+$packTable[PT_SERVERINFODATA]       = \&packInfo;
 # -------------------------------------------------------------------
 $PacketTagName[PT_FOUNDSOURCES]     = 'Found sources';
 my $unpackFoundSources = sub {
@@ -726,9 +750,9 @@ $PacketTagName[PT_UDP_SERVERLIST]       = 'UDP Server list';
 $unpackTable[PT_UDP_SERVERLIST]         = \&unpackAddrList;
 $packTable[PT_UDP_SERVERLIST]           = \&packAddrList;
 # -------------------------------------------------------------------
-$PacketTagName[PT_UDP_SERVERINFOREQ]    = 'UDP Server info request';
-$unpackTable[PT_UDP_SERVERINFOREQ]      = $unpackEmpty;
-$packTable[PT_UDP_SERVERINFOREQ]        = $packEmpty;
+$PacketTagName[PT_UDP_GETSERVERINFO]    = 'UDP Get server info';
+$unpackTable[PT_UDP_GETSERVERINFO]      = $unpackEmpty;
+$packTable[PT_UDP_GETSERVERINFO]        = $packEmpty;
 # -------------------------------------------------------------------
 $PacketTagName[PT_UDP_SERVERINFO]       = 'UDP Server info';
 $unpackTable[PT_UDP_SERVERINFO]         = sub {

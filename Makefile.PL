@@ -2,7 +2,7 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
     'NAME'		=> 'P2P::pDonkey',
-    'VERSION_FROM'	=> 'lib/P2P/pDonkey/Packet.pm',
+    'VERSION'	=> '0.04',
     'PREREQ_PM'		=> {
 						'Digest::MD4' => 1.1,
 						'Tie::IxHash' => 1.21,
@@ -12,5 +12,5 @@ WriteMakefile(
 					   },
     ($] >= 5.005 ?    ## Add these new keywords supported since 5.005
       (ABSTRACT => 'Set of tools for eDonkey peer2peer protocol.',
-       AUTHOR     => 'Alexey Klimkin <klimkin@mail.ru>') : ()),
+       AUTHOR     => 'Alexey Klimkin <klimkin at cpan.org>') : ()),
 );
