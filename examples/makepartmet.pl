@@ -1,4 +1,4 @@
-#! /usr/bin/perl
+#! /usr/bin/perl -w
 #
 # Copyright (c) 2003-2004 Alexey klimkin <klimkin at cpan.org>.
 # All rights reserved.
@@ -7,16 +7,16 @@
 #
 
 use strict;
-use P2P::pDonkey::Met ':part';
+use P2P::pDonkey::Meta qw( makeFileInfo printInfo );
+use P2P::pDonkey::Met qw( writePartMet );
 
-#@ARGV or @ARGV = ('23.part.met');
 die "Usage: $0 <files>\n" unless @ARGV;
 
 foreach my $f (@ARGV) {
-    my $p = readPartMet($f);
-    if ($p) {
-        printPartMet($p);
-    } else {
-        print "$f is not in part.met format\n";
+    my $i = makeFileInfo($f);
+    my $p1 = packFileInfo($i);
+    if (defined $i) {
+        printInfo($i);
+        writePartMet("$f.part.met", $i);
     }
 }

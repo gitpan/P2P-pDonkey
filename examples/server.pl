@@ -1,6 +1,6 @@
 #! /usr/bin/perl -w
 #
-# Copyright (c) 2003 Alexey klimkin <klimkin at cpan.org>.
+# Copyright (c) 2003-2004 Alexey klimkin <klimkin at cpan.org>.
 # All rights reserved.
 # This program is free software; you can redistribute it and/or
 # modify it under the same terms as Perl itself.
@@ -73,7 +73,7 @@ sub processHello {
 #    $users{$d->{Hash}} = $d;
     $server->Queue($conn, PT_IDCHANGE, $conn->{IP});
 #    $server->Queue($conn, PT_UPDATESERVER, \%serverinfo);
-    $server->Queue($conn, PT_SERVERMESSAGE, $message);
+#    $server->Queue($conn, PT_SERVERMESSAGE, $message);
     $server->Queue(undef, PT_SERVERSTATUS,  $server->{nUsers}, $server->{nFiles});
 }
 

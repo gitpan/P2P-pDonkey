@@ -1,6 +1,6 @@
 # P2P::pDonkey::Meta.pm
 #
-# Copyright (c) 2003 Alexey klimkin <klimkin at cpan.org>. 
+# Copyright (c) 2003-2004 Alexey klimkin <klimkin at cpan.org>. 
 # All rights reserved.
 # This program is free software; you can redistribute it and/or
 # modify it under the same terms as Perl itself.
@@ -13,7 +13,7 @@ use warnings;
 
 require Exporter;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 our @ISA = qw(Exporter);
 
@@ -69,6 +69,7 @@ our %EXPORT_TAGS =
                 packMeta unpackMeta printMeta makeMeta sameMetaType
                 packMetaList unpackMetaList printMetaList
                 packMetaListU unpackMetaListU printMetaListU
+                MetaListU2MetaList MetaList2MetaListU
 
                 packInfo unpackInfo makeClientInfo makeServerInfo printInfo
                 packInfoList unpackInfoList printInfoList
@@ -80,7 +81,6 @@ our %EXPORT_TAGS =
 
                 packAddr unpackAddr printAddr idAddr
                 packAddrList unpackAddrList 
-
                ) ],
   'tags' => [ qw(
                 SZ_FILEPART
@@ -110,7 +110,7 @@ our @EXPORT = qw(
 use Carp;
 use File::Glob ':glob';
 use Tie::IxHash;
-use Digest::MD4;
+use Digest::MD4 qw( md4_hex );
 use File::Basename;
 use File::Find;
 use POSIX qw( ceil );
@@ -150,7 +150,14 @@ use constant SPRI_LOW           => 0x02;
 use constant SPRI_NORMAL        => 0x00;
 use constant SPRI_HIGH          => 0x01;
 
-use constant SZ_FILEPART        => 9500*1024;
+# --- known sizes of pieces
+use constant SZ_FILEPART        => 9500*1024; # v 0.4.x
+use constant SZ_B_FILEPART      => 9728000;
+use constant SZ_S_FILEPART      => 486400;
+
+# -- tag bytes in file info
+use constant FI_DESCRIPTION     => 0x2;
+use constant FI_PART_HASHES     => 0x1;
 
 # --- value types
 use constant VT_STRING          => 0x02;
@@ -279,6 +286,13 @@ sub unpackSList {
     return \@res;
 }
 
+sub unpackHash8 {
+    my $res = unpack("x$_[1] H16", $_[0]);
+    length($res) == 16 or return;
+    $_[1] += 8;
+    return $res;
+}
+
 sub unpackHash {
     my $res = unpack("x$_[1] H32", $_[0]);
     length($res) == 32 or return;
@@ -321,6 +335,9 @@ sub packSList {
         $res .= packS($s);
     }
     return $res;
+}
+sub packHash8 {
+    return pack('H16', $_[0]);
 }
 sub packHash {
     return pack('H32', $_[0]);
@@ -554,7 +571,7 @@ sub printInfoList {
 sub makeClientInfo {
     my ($ip, $port, $nick, $version) = @_;
     my (%meta, $hash);;
-    $hash = Digest::MD4->hexhash($nick);
+    $hash = md4_hex($nick);
     tie %meta, "Tie::IxHash";
     $meta{Name}     = makeMeta(TT_NAME, $nick);
     $meta{Version}  = makeMeta(TT_VERSION, $version);
@@ -565,7 +582,7 @@ sub makeClientInfo {
 sub makeServerInfo {
     my ($ip, $port, $name, $description) = @_;
     my (%meta, $hash);;
-    $hash = Digest::MD4->hexhash($name);
+    $hash = md4_hex($name);
     tie %meta, "Tie::IxHash";
     $meta{Name}         = makeMeta(TT_NAME, $name);
     $meta{Description}  = makeMeta(TT_DESCRIPTION, $description);
@@ -599,6 +616,15 @@ sub printInfo {
         }
     }
 
+    if ($info->{Parts8}) {
+        print "Parts8:\n";
+        my $i = 0;
+        foreach my $parthash (@{$info->{Parts8}}) {
+            print "\t$i: $parthash\n";
+            $i++;
+        }
+    }
+
     if ($info->{Gaps}) {
         print "Gaps:\n";
         my $gaps = $info->{Gaps};
@@ -619,9 +645,13 @@ sub printInfo {
 # file info
 sub unpackFileInfo {
     my (%res, $metas, %tags, @gaps);
+    my $bb;
+
+    $bb = &unpackB;
+    ($bb == FI_DESCRIPTION) or return;
+
     defined($res{Date}  = &unpackD) or return;
     defined($res{Hash}  = &unpackHash) or return;
-    $res{Parts} = &unpackHashList or return;
     $metas      = &unpackMetaList or return;
 
     tie %tags, "Tie::IxHash";
@@ -634,23 +664,63 @@ sub unpackFileInfo {
     }
     $res{Gaps} = [sort {$a <=> $b} @gaps];
     $res{Meta} = \%tags;
+
+    $bb = &unpackB;
+    if ($bb == FI_PART_HASHES) {
+        my $size = $tags{Size}{Value};
+        if ($size >= SZ_B_FILEPART) {
+            my @hashes;
+            for (my $i = 0; $i < ceil($size / SZ_B_FILEPART); $i++) {
+                push @hashes, &unpackHash;
+            }
+            $res{Parts} = \@hashes;
+            (&unpackB == FI_PART_HASHES) or return;
+        }
+        if ($size >= SZ_S_FILEPART) {
+            my @hashes8;
+            for (my $i = 0; $i < ceil($size / SZ_S_FILEPART); $i++) {
+                push @hashes8, &unpackHash8;
+            }
+            $res{Parts8} = \@hashes8;
+        }
+    } elsif ($bb == FI_DESCRIPTION) {
+        if (defined $_[1]) {
+            $_[1] -= 1;
+        }
+    }
+    
     return \%res;
 }
 
 sub packFileInfo {
     my ($d) = @_;
-    my ($res, $metas, $gaps, $ngaps);
-    $res = packD($d->{Date}) . packHash($d->{Hash}) . packHashList($d->{Parts});
+    my ($res, $metas);
+    $res = packB(FI_DESCRIPTION) . packD($d->{Date}) . packHash($d->{Hash});
     $metas = MetaListU2MetaList($d->{Meta});
-    $gaps = $d->{Gaps};
-    $ngaps = @$gaps / 2;
-    for (my ($i, $n) = (0, 0); $i < $ngaps; $i += 2, $n++) {
-        push @$metas, makeMeta(TT_GAPSTART, $gaps->[$i], $n);
-    }
-    for (my ($i, $n) = (0, 0); $i < $ngaps; $i += 2, $n++) {
-        push @$metas, makeMeta(TT_GAPEND, $gaps->[$i+1], $i);
+    if ($d->{Gaps} and @{$d->{Gaps}}) {
+        my $gaps = $d->{Gaps};
+        my $ngaps = @$gaps / 2;
+        for (my ($i, $n) = (0, 0); $i < $ngaps; $i += 2, $n++) {
+            push @$metas, makeMeta(TT_GAPSTART, $gaps->[$i], $n);
+        }
+        for (my ($i, $n) = (0, 0); $i < $ngaps; $i += 2, $n++) {
+            push @$metas, makeMeta(TT_GAPEND, $gaps->[$i+1], $i);
+        }
     }
     $res .= packMetaList($metas);
+    if ($d->{Parts} and @{$d->{Parts}}) {
+        $res .= packB(FI_PART_HASHES);
+        foreach my $h ($d->{Parts}) {
+            $res .= packHash($h);
+        }
+    }
+    if ($d->{Parts8} and @{$d->{Parts8}}) {
+        $res .= packB(FI_PART_HASHES);
+        foreach my $h8 ($d->{Parts8}) {
+            $res .= packHash8($h8);
+        }
+    }
+    $res .= packB(0x0);
     return $res;
 }
 
@@ -724,31 +794,38 @@ sub makeFileInfo {
     binmode(HANDLE);
 
     $context = new Digest::MD4;
+    $context->addfile(\*HANDLE);
+    $hash = $context->hexdigest;
 
+    my $part;
     my @parts = ();
-    if ($size > SZ_FILEPART) {
+    if ($size > SZ_B_FILEPART) {
         seek(HANDLE, 0, 0);
-        my ($nparts, $part);
-        $nparts = ceil($size / SZ_FILEPART);
-        for (my $i = 0; $i < $nparts; $i++) {
-            read(HANDLE, $part, SZ_FILEPART);
-            push @parts, Digest::MD4->hexhash($part);
-            $context->add($part);
+        for (my $i = 0; $i < ceil($size / SZ_B_FILEPART); $i++) {
+            read(HANDLE, $part, SZ_B_FILEPART);
+            push @parts, md4_hex($part);
         }
-    } else {
-        $context->addfile(\*HANDLE);
     }
-    $hash = $context->hexdigest();
+    my @parts8 = ();
+    if ($size >= SZ_S_FILEPART) {
+        seek(HANDLE, 0, 0);
+        for (my $i = 0; $i < ceil($size / SZ_S_FILEPART); $i++) {
+            read(HANDLE, $part, SZ_S_FILEPART);
+            push @parts8, substr(md4_hex($part), 0, 16);
+        }
+    }
     
     close HANDLE;
 
-    return {Date => $date, Hash => $hash, Parts => \@parts, Meta => \%meta, Path => $path};
+    return {Date => $date, Hash => $hash, Parts => \@parts, Parts8 => \@parts8, Meta => \%meta, Path => $path};
 }
 
 sub makeFileInfoList {
     my (@res, $info);
     @res = ();
     foreach my $pattern (@_) {
+        my $globbed = bsd_glob($pattern, GLOB_TILDE);
+        print "ggg: $globbed\n";
         find { wanted => sub { push(@res, makeFileInfo($File::Find::name)) if -f $File::Find::name}, no_chdir => 1 }, 
             bsd_glob($pattern, GLOB_TILDE);
     }

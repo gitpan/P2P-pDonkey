@@ -2,9 +2,9 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
     'NAME'		=> 'P2P::pDonkey',
-    'VERSION'	=> '0.04',
+    'VERSION'	=> '0.05',
     'PREREQ_PM'		=> {
-						'Digest::MD4' => 1.1,
+						'Digest::MD4' => 1.3,
 						'Tie::IxHash' => 1.21,
 						'Tie::RefHash' => 1.30,
 						'Data::Hexdumper' => 1.0,

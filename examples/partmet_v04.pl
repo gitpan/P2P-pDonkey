@@ -8,12 +8,13 @@
 
 use strict;
 use P2P::pDonkey::Met ':part';
+use P2P::pDonkey::Met_v04 ':all';
 
 #@ARGV or @ARGV = ('23.part.met');
 die "Usage: $0 <files>\n" unless @ARGV;
 
 foreach my $f (@ARGV) {
-    my $p = readPartMet($f);
+    my $p = readPartMet_v04($f);
     if ($p) {
         printPartMet($p);
     } else {

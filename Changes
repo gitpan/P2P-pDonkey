@@ -1,5 +1,10 @@
 Revision history for Perl extension P2P::pDonkey.
 
+0.05  Mon Apr 19 17:33:15 MSD 2004
+    - added Meta_v04.pm and Met_v04.pm - old versions of proto.
+    - now using Digest::MD4 v >= 1.3.
+    - added tests.
+
 0.04  Tue Apr 29 18:53:39 MSD 2003
     - eDonkey-clients is no more, eDonkey-soft instead.
     - eDonkey protocol specification will not ship inside the 

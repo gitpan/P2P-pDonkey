@@ -1,6 +1,6 @@
 # P2P::pDonkey::Met.pm
 #
-# Copyright (c) 2003 Alexey klimkin <klimkin at cpan.org>. 
+# Copyright (c) 2003-2004 Alexey klimkin <klimkin at cpan.org>. 
 # All rights reserved.
 # This program is free software; you can redistribute it and/or
 # modify it under the same terms as Perl itself.
@@ -13,7 +13,7 @@ use warnings;
 
 require Exporter;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 our @ISA = qw(Exporter);
 
@@ -25,6 +25,8 @@ our @ISA = qw(Exporter);
 # If you do not need this, moving things directly into @EXPORT or @EXPORT_OK
 # will save memory.
 our %EXPORT_TAGS = ( 'all' => [ qw(
+    MT_KNOWNMET MT_PARTMET MT_SERVERMET
+    
     unpackServerDesc packServerDesc printServerDesc makeServerDesc
     unpackServerDescList packServerDescList printServerDescList
     unpackServerDescListU packServerDescListU printServerDescListU
@@ -39,6 +41,8 @@ our %EXPORT_TAGS = ( 'all' => [ qw(
 
     unpackPrefMet packPrefMet printPrefMet
 	readPrefMet writePrefMet
+
+    readFile writeFile
 ) ],
                   'server' => [ qw(
     unpackServerDesc packServerDesc printServerDesc makeServerDesc
@@ -77,11 +81,10 @@ my $debug = 0;
 
 use constant MT_SERVERMET   => 0x0e;
 use constant MT_PARTMET     => 0xe1;
-use constant MT_PARTMET_OLD => 0xe0;
 use constant MT_KNOWNMET    => 0x0e;
 
 
-my $readFile = sub {
+sub readFile {
     my ($fname, $tag) = @_;
     my ($handle, $buf);
     my $rs = $/;
@@ -107,7 +110,7 @@ my $readFile = sub {
     return \$buf;
 };
 
-my $writeFile = sub {
+sub writeFile($$) {
     my ($fname, $buf) = @_;
     my $handle;
     open($handle, ">$fname") or warn "Can't open `$fname': $!\n" and return;
@@ -223,7 +226,7 @@ sub printServerMet {
 sub readServerMet {
     my ($fname) = @_;
     my ($off, $buf, $res);
-    $buf = &$readFile($fname, MT_SERVERMET) or return;
+    $buf = readFile($fname, MT_SERVERMET) or return;
     $off = 0;
     $res = unpackServerMet($$buf, $off);
     if ($res && $off != length $$buf) {
@@ -235,7 +238,7 @@ sub readServerMet {
 sub writeServerMet {
     my ($fname, $servers) = @_;
     my $buf = packServerMet($servers);
-    return &$writeFile($fname, \$buf);
+    return writeFile($fname, \$buf);
 }
 
 # -----------------------------------------------------------------------------
@@ -243,7 +246,7 @@ sub writeServerMet {
 
 sub unpackPartMet {
     my $v = &unpackB;
-    $v == MT_PARTMET || $v == MT_PARTMET_OLD or return;
+    $v == MT_PARTMET or return;
     return &unpackFileInfo;
 }
 sub packPartMet {
@@ -256,9 +259,7 @@ sub printPartMet {
 sub readPartMet {
     my ($fname) = @_;
     my ($off, $buf, $res);
-    $buf = &$readFile($fname, MT_PARTMET) 
-        or $buf = &$readFile($fname, MT_PARTMET_OLD)
-        or return;
+    $buf = readFile($fname, MT_PARTMET) or return;
     $off = 0;
     $res = unpackPartMet($$buf, $off);
     $res->{Path} = $fname;
@@ -271,12 +272,12 @@ sub readPartMet {
 sub writePartMet {
     my ($fname, $p) = @_;
     my $buf = packPartMet($p);
-    return &$writeFile($fname, \$buf);
+    return writeFile($fname, \$buf);
 }
+
 
 # -----------------------------------------------------------------------------
 # known.met
-
 sub unpackKnownMet {
     &unpackB == MT_KNOWNMET or return;
     return &unpackFileInfoList;
@@ -287,11 +288,10 @@ sub packKnownMet {
 sub printKnownMet {
     &printInfoList;
 }
-
 sub readKnownMet {
     my ($fname) = @_;
     my ($off, $buf, $res);
-    $buf = &$readFile($fname, MT_KNOWNMET) or return;
+    $buf = readFile($fname, MT_KNOWNMET) or return;
     $off = 0;
     $res = unpackKnownMet($$buf, $off);
     if ($res && $off != length $$buf) {
@@ -302,7 +302,7 @@ sub readKnownMet {
 sub writeKnownMet {
     my ($fname, $p) = @_;
     my $buf = packKnownMet($p);
-    return &$writeFile($fname, \$buf);
+    return writeFile($fname, \$buf);
 }
 
 # -----------------------------------------------------------------------------
@@ -336,7 +336,7 @@ sub printPrefMet {
 sub readPrefMet {
     my ($fname) = @_;
     my ($off, $buf, $res);
-    $buf = &$readFile($fname) or return;
+    $buf = readFile($fname) or return;
     $off = 0;
     $res = unpackPrefMet($$buf, $off);
     if ($res && $off != length $$buf) {
@@ -347,7 +347,7 @@ sub readPrefMet {
 sub writePrefMet {
     my ($fname, $p) = @_;
     my $buf = packPrefMet($p);
-    return &$writeFile($fname, \$buf);
+    return writeFile($fname, \$buf);
 }
 
 1;

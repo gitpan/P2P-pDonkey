@@ -8,11 +8,12 @@
 
 use strict;
 use P2P::pDonkey::Met ':known';
+use P2P::pDonkey::Met_v04 ':all';
 
 warn "Usage: $0 <file>\n" unless @ARGV;
 $ARGV[0] or $ARGV[0] = 'known.met';
 
-my $p = readKnownMet($ARGV[0]);
+my $p = readKnownMet_v04($ARGV[0]);
 if ($p) {
     printKnownMet($p);
 } else {

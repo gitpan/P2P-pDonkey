@@ -1,7 +1,7 @@
 #########################
 
 use Test;
-BEGIN { plan tests => 29 };
+BEGIN { plan tests => 30 };
 
 use P2P::pDonkey::Meta ':all';
 use Socket;
@@ -81,3 +81,7 @@ ok($ok && $sql eq "(Name LIKE 'This' OR Type LIKE 'Video') AND Size >= 123 AND N
 ########################
 # file info
 my $i = makeFileInfo('t/224.avi');
+my $packed_i_1 = packFileInfo($i);
+my $packed_i_2 = packFileInfo(unpackFileInfo($packed_i_1, $off=0), $off=0);
+ok($packed_i_1 eq $packed_i_2);
+
