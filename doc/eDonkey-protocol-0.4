@@ -1,4 +1,4 @@
-                 eDonkey Protocol v0.3
+                 eDonkey Protocol v0.4
 
     Copyright (c) 2002 Alexey Klimkin <klimkin@mail.ru>
 ===========================================================
@@ -28,34 +28,43 @@ Content
 
                    Client <-> Server
       -------------------------------------------
+
+  Login
+      -------------------------------------------
 0x01          Hello server ->
 0x40                      <-  ID change
 0x15          Offer files  ->
-0x14      Get server list  ->
 0x38                      <-  Server message
+0x14      Get server list  ->
 0x32                      <-  Server list
 0x41                      <-  Server info
 0x34                      <-  Server status
+
+  Search file
+      -------------------------------------------
 0x16          Search file  ->
 0x33                      <-  Search file results
 0x21         More results  ->
-0x19          Get sources  ->
-0x42                      <-  Found sources
+
+  Search user
+      -------------------------------------------
 0x1a          Search user  ->
 0x43                      <-  Search user results
-0x1c           IP request  ->
-0x35                      <-  IP request answer
-0x36                      <-  IP request fail
-0x4d                      <-  New client ID
-0x1d       Get chat rooms  ->
-0x39                      <-  Chat rooms
-0x1f            Join room  ->
-0x1e         Chat message  ->
-0x3a                      <-  Chat broadcast
-0x3b                      <-  Chat join
-0x3c                      <-  Chat leave
-0x3d                      <-  Chat users
+
+  Get sources
       -------------------------------------------
+0x19          Get sources  ->
+0x42                      <-  Found sources
+
+  Callback
+      -------------------------------------------
+0x1c    Client cb request ->
+0x35                      <-  Server cb request
+0x36                      <-  Callback fail
+
+  ID change ?
+      -------------------------------------------
+0x4d                      <-  New client ID
 
                    Client <-> Client
       -------------------------------------------
@@ -87,30 +96,25 @@ Content
 
     Client <-> Server
 -------------------------
-<?>                     ::= 0x05 ?
+<Bad protocol>          ::= 0x05
 <Get server list>       ::= 0x14
 <Offer files>           ::= 0x15 <File info list>
 <Search file>           ::= 0x16 <Search query> 
+<Disconnect>            ::= 0x18
 <Get sources>           ::= 0x19 <File hash>
 <Search user>           ::= 0x1a <Search query>
-<IP request>            ::= 0x1c <Client ID>
-<Get chat rooms>        ::= 0x1d ?
-<Chat message>          ::= 0x1e ?
-<Join room>             ::= 0x1f ?
+<?>                     ::= 0x1b ?
+<Client cb request>     ::= 0x1c <Client ID>
+<?>                     ::= 0x20 ?  // # Exception in Connection::doTask 25  for 16.39
 <More results>          ::= 0x21
 <Server list>           ::= 0x32 <Address list>
 <Search file results>   ::= 0x33 <File info list>
 <Server status>         ::= 0x34 <Nusers> <Nfiles>
-<IP request answer>     ::= 0x35 <Client Address>
-<IP request fail>       ::= 0x36 <Client ID>
+<Server cb request>     ::= 0x35 <Client Address>
+<Callback fail>         ::= 0x36 <Client ID>
 <Server message>        ::= 0x38 <String>
-<Chat rooms>            ::= 0x39 BYTE (<String> DWORD)*
-<Chat broadcast>        ::= 0x3a ?
-<Chat join>             ::= 0x3b ?
-<Chat leave>            ::= 0x3c ?
-<Chat users>            ::= 0x3d ?
 <ID change>             ::= 0x40 <Client ID>
-<Server info>           ::= 0x41 <Server info>
+<Server info>           ::= 0x41 <Server info data>
 <Found sources>         ::= 0x42 <File hash> <Address list> // ID list actually
 <Search user results>   ::= 0x43 <Client info list>
 
@@ -141,18 +145,43 @@ Content
 
            UDP
 -------------------------
-<UDP Server status request> ::= 0x96 DWORD??
-<UDP Server status>         ::= 0x97 DWORD?? Nusers Nfiles
+<UDP Server status request> ::= 0x96 DWORD
+<UDP Server status>         ::= 0x97 DWORD Nusers Nfiles    // DWORD is the same value as passed in request
 <UDP Search file>           ::= 0x98 <Search query>
 <UDP Search file result>    ::= 0x99 <File info>
 <UDP Get sources>           ::= 0x9a <File hash>
 <UDP Found sources>         ::= 0x9b <File hash> <Address list>
 <UDP Callback request>      ::= 0x9c <Address> <Client ID>
-<UDP Get server list>       ::= 0xa0 <Address>
-<UDP Server list>           ::= 0xa1 <Address> <Address list>
-<UDP Get server info>       ::= 0xa2 ?
-<UDP Server info>           ::= 0xa3 ?
-<UDP ?>                     ::= 0xa4 ?
+<UDP Callback fail>         ::= 0x9e <Client ID>
+<UDP ?>                     ::= 0xa0 ?
+<UDP Server list>           ::= 0xa1 <Address list>
+<UDP Get server info>       ::= 0xa2
+<UDP Server info>           ::= 0xa3 <Server name> <Server description>
+<UDP Get server list>       ::= 0xa4
+
+
+
+  This is how chat could be (mldonkey)
+      -------------------------------------------
+0x1d       Get chat rooms  ->
+0x39                      <-  Chat rooms
+0x1f            Join room  ->
+0x1e         Chat message  ->
+0x3a                      <-  Chat broadcast
+0x3b                      <-  Chat join
+0x3c                      <-  Chat leave
+0x3d                      <-  Chat users
+      -------------------------------------------
+<Get chat rooms>        ::= 0x1d ?  // not in 16.39
+<Chat message>          ::= 0x1e ?  // not in 16.39
+<Join room>             ::= 0x1f ?  // not in 16.39
+<Chat rooms>            ::= 0x39 BYTE (<String> DWORD)* // not in 16.39
+<Chat broadcast>        ::= 0x3a ?
+<Chat join>             ::= 0x3b ?
+<Chat leave>            ::= 0x3c ?
+<Chat users>            ::= 0x3d ?
+
+
 
 <Search query>      ::= 0x00 <Operator> <Search query> <Search query>
                     ||= 0x01 <String> <Meta tag name>
@@ -166,7 +195,7 @@ Content
 
 <File info list>    ::= DWORD <File info>*
 <File info>         ::= <File hash> <Client ID> <Port> <Meta list>
-<Server info>       ::= HASH <Server IP> <Port> <Meta list>
+<Server info data>  ::= HASH? <Server IP> <Port> <Meta list>
 <Client info list>  ::= DWORD <Client info>*
 <Client info>       ::= HASH <Client ID> <Port> <Meta list>
 
@@ -206,11 +235,14 @@ Content
 <Start offset>      ::= DWORD
 <End offset>        ::= DWORD
 
+<Server name>       ::= <String>
+<Server description>::= <String>
+
 <String>            ::= WORD DATA
 <Client ID>         ::= DWORD   // client IP for high id, or number
 <Nusers>            ::= DWORD
 <Nfiles>            ::= DWORD
-<File hash>         ::= HASH
+<File hash>         ::= HASH    // MD4 of file for files of unknown type
 <IP>                ::= DWORD
 <Port>              ::= WORD
 
@@ -254,6 +286,16 @@ NOTE: <Tail> may keep some data as
 
 6. Changes
 ===========================================================
+
+0.4   Fri Oct 11 11:53:32 MSD 2002
+
+    - is chat actually function in eDonkey network? at least not for
+      server v16.39 under linux.
+    - rewritten udp section.
+    - added packet 0x9e - UDP Callback fail.
+    - added packet 0x18 - server know the packet and drops connection.
+    - added packet 0x05 - this packet server sends to client, if server
+      receive bad packet from client. Server sends 0x05 and closes connection.
 
 0.3   Tue Oct  8 17:50:28 MSD 2002
     - added format for *.met files.

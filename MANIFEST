@@ -6,7 +6,7 @@ Makefile.PL
 README
 Changes
 MANIFEST
-doc/eDonkey-protocol
+doc/eDonkey-protocol-0.4
 lib/P2P/pDonkey/Packet.pm
 lib/P2P/pDonkey/Met.pm
 lib/P2P/pDonkey/Util.pm
@@ -15,6 +15,7 @@ examples/23.part.met
 examples/24.part.met
 examples/fileinfo.pl
 examples/globservlist.pl
+examples/P2P
 examples/packet.pl
 examples/partmet.pl
 examples/ServBase.pm
@@ -22,6 +23,7 @@ examples/server.met
 examples/server.pl
 examples/servermet.pl
 examples/knownmet.pl
+examples/servlist.pl
 examples/client.pl
 examples/known.met
 examples/pref.met

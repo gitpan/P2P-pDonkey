@@ -12,7 +12,7 @@ use Tie::RefHash;
 use P2P::pDonkey::Meta ':all';
 use P2P::pDonkey::Util;
 use P2P::pDonkey::Packet ':all';
-use P2P::pDonkey::Met qw(ReadServerMet WriteServerMet);
+use P2P::pDonkey::Met ':server';
 use ServBase;
 
 my ($debug, $dump) = (1, 1);
@@ -24,9 +24,7 @@ my $user = makeClientInfo(0, 4662, 'Muxer', 60);
 
 my ($serverip, $serverport);
 
-my ($nserv, %servers);
-$nserv = ReadServerMet('ss.met', \%servers);
-print "Servers: $nserv\n";
+my $servers = readServerMet('ss.met');
 my $shared = makeFileInfoList('.');
 my ($saddr, $port) = ('klon', 4661);
 
@@ -178,6 +176,25 @@ sub checkIN {
 
         if ($cmd =~ /^vf$/) {
             $server->Queue(undef, PT_VIEWFILES, '');
+            last SWITCH;
+        }
+
+        if ($cmd =~ /^msg (.*)$/) {
+            $server->Queue(undef, PT_MESSAGE, $1);
+            last SWITCH;
+        }
+
+        if ($cmd =~ /^t$/) {
+#            my @unk = (0x2,0x3,0x4,
+#                       0x17,
+#                       0x22,0x23,0x24,0x25,0x26,0x27,0x28,0x29,0x2a,0x2b,0x2c,0x2d,0x2e,0x2f,0x30,0x31,
+#                       0x44,0x45);
+#            my @unk = (0x53);
+            my @unk = (0x39);
+            foreach my $pt (@unk) {
+                print "$pt:\n";
+                $server->Queue(undef, $pt);
+            }
             last SWITCH;
         }
         

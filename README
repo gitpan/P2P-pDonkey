@@ -37,6 +37,7 @@ DEPENDENCIES
     File::Glob
     Socket
     Tie::IxHash
+    Video::Info
 
   Examples requires:
 

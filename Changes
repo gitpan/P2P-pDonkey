@@ -1,5 +1,11 @@
 Revision history for Perl extension P2P::pDonkey.
 
+0.02  Fri Oct 11 11:49:55 MSD 2002
+
+    - a lot fixes for packet formats.
+    - finished pack/unpack/print/read/write functions for met files.
+    - fixed bug returning undef instead ref to empty list.
+
 0.01  Fri Oct  4 15:33:54 2002
 	- original version; created by h2xs 1.21 with options
 		-AX -n P2P::pDonkey

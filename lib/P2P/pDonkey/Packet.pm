@@ -16,6 +16,7 @@ require Exporter;
 our @ISA = qw(Exporter);
 
 our %EXPORT_TAGS = ( 'all' => [ qw(
+                                   PT_TEST
     PacketTagName
     packBody unpackBody
     packUDPHeader unpackUDPHeader
@@ -32,15 +33,16 @@ our %EXPORT_TAGS = ( 'all' => [ qw(
     PT_GETSERVERLIST
     PT_OFFERFILES
     PT_SEARCHFILE
+    PT_DISCONNECT
     PT_GETSOURCES
     PT_SEARCHUSER
-    PT_IPREQUEST
+    PT_CLIENTCBREQ
     PT_MORERESULTS
     PT_SERVERLIST
     PT_SEARCHFILERES
     PT_SERVERSTATUS
-    PT_IPREQUESTANS
-    PT_IPREQUESTFAIL
+    PT_SERVERCBREQ
+    PT_CBFAIL
     PT_SERVERMESSAGE
     PT_IDCHANGE
     PT_SERVERINFO
@@ -71,9 +73,13 @@ our %EXPORT_TAGS = ( 'all' => [ qw(
     PT_UDP_SEARCHFILERES
     PT_UDP_GETSOURCES
     PT_UDP_FOUNDSOURCES
-    PT_UDP_CALLBACKREQUEST
-    PT_UDP_GETSERVERLIST
+    PT_UDP_CBREQUEST
+    PT_UDP_CBFAIL
+    PT_UDP_NEWSERVER
     PT_UDP_SERVERLIST
+    PT_UDP_SERVERINFO
+    PT_UDP_SERVERINFOREQ
+    PT_UDP_GETSERVERLIST
 ) ] );
 
 our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
@@ -81,13 +87,15 @@ our @EXPORT_OK = ( @{ $EXPORT_TAGS{'all'} } );
 our @EXPORT = qw(
 	
 );
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 
 # Preloaded methods go here.
 
 use Carp;
 use P2P::pDonkey::Meta ':all';
+
+use constant PT_TEST => 0x3f;
 
 use constant SZ_UDP_HEADER          => 1;       # 1 - header marker
 use constant SZ_TCP_HEADER          => 5;       # 1 - header marker, 4 - packet length
@@ -96,25 +104,34 @@ use constant PT_HEADER              => 0xe3;
 use constant PT_HELLO               => 0x01;    # FIXME!!! 2 hello packets!!!
 use constant PT_HELLOSERVER         => 0x01;
 use constant PT_HELLOCLIENT         => 0x01;
+# unused by server                     0x02 - 0x04
 use constant PT_BADPROTOCOL         => 0x05;
 # client <-> server
 use constant PT_GETSERVERLIST       => 0x14;
 use constant PT_OFFERFILES          => 0x15;
 use constant PT_SEARCHFILE          => 0x16;
+# unused by server                     0x17
+use constant PT_DISCONNECT          => 0x18;
 use constant PT_GETSOURCES          => 0x19;
 use constant PT_SEARCHUSER          => 0x1a;
-use constant PT_IPREQUEST           => 0x1c;
+# ?                                    0x1b
+use constant PT_CLIENTCBREQ         => 0x1c;
+# Exception in Connection::doTask 25   0x20 for 16.39
 use constant PT_MORERESULTS         => 0x21;
+# unused by server                     0x22 - 0x31
 use constant PT_SERVERLIST          => 0x32;
 use constant PT_SEARCHFILERES       => 0x33;
 use constant PT_SERVERSTATUS        => 0x34;
-use constant PT_IPREQUESTANS        => 0x35;
-use constant PT_IPREQUESTFAIL       => 0x36;
+use constant PT_SERVERCBREQ         => 0x35;
+use constant PT_CBFAIL              => 0x36;
+# unused by server                     0x37
 use constant PT_SERVERMESSAGE       => 0x38;
+# unused by server                     0x39 - 0x3f
 use constant PT_IDCHANGE            => 0x40;
 use constant PT_SERVERINFO          => 0x41;
 use constant PT_FOUNDSOURCES        => 0x42;
 use constant PT_SEARCHUSERRES       => 0x43;
+# unused by server                     0x44 - 0x45
 # client <-> client
 use constant PT_SENDINGPART         => 0x46;
 use constant PT_REQUESTPARTS        => 0x47;
@@ -129,6 +146,7 @@ use constant PT_FILESTATUSREQ       => 0x4f;
 use constant PT_FILESTATUS          => 0x50;
 use constant PT_HASHSETREQUEST      => 0x51;
 use constant PT_HASHSETANSWER       => 0x52;
+# ?                                    0x53
 use constant PT_UPLOADREQUEST       => 0x54;
 use constant PT_UPLOADACCEPT        => 0x55;
 use constant PT_CANCELTRANSFER      => 0x56;
@@ -142,9 +160,15 @@ use constant PT_UDP_SEARCHFILE      => 0x98;
 use constant PT_UDP_SEARCHFILERES   => 0x99;
 use constant PT_UDP_GETSOURCES      => 0x9a;
 use constant PT_UDP_FOUNDSOURCES    => 0x9b;
-use constant PT_UDP_CALLBACKREQUEST => 0x9c;
-use constant PT_UDP_GETSERVERLIST   => 0xa0;
+use constant PT_UDP_CBREQUEST       => 0x9c;
+# unused by server                     0x9d
+use constant PT_UDP_CBFAIL          => 0x9e;
+# unused by server                     0x9f
+use constant PT_UDP_NEWSERVER       => 0xa0;
 use constant PT_UDP_SERVERLIST      => 0xa1;
+use constant PT_UDP_SERVERINFOREQ   => 0xa2;
+use constant PT_UDP_SERVERINFO      => 0xa3;
+use constant PT_UDP_GETSERVERLIST   => 0xa4;
 
 my (@PacketTagName, @packTable, @unpackTable);
 
@@ -172,8 +196,9 @@ sub unpackBody {
 sub packBody {
     my ($pt) = shift;
     my $f = $packTable[$pt];
-    $f or confess "Don't know how to pack ".sprintf("0x%x",$pt)." packets\n";
-    return pack('Ca*', $pt, &$f);
+#    $f or confess "Don't know how to pack ".sprintf("0x%x",$pt)." packets\n";
+#    return pack('Ca*', $pt, &$f);
+    return $f ? pack('Ca*', $pt, &$f) : pack('C', $pt);
 }
 
 sub unpackUDPHeader {
@@ -195,6 +220,11 @@ sub packTCPHeader {
 }
 
 # -------------------------------------------------------------------
+$PacketTagName[PT_TEST] = 'test';
+$unpackTable[PT_TEST] = $unpackEmpty;
+$packTable[PT_TEST] = $packEmpty;
+# -------------------------------------------------------------------
+# -------------------------------------------------------------------
 $PacketTagName[PT_HEADER]           = 'Header';
 # -------------------------------------------------------------------
 $PacketTagName[PT_HELLO]            = 'Hello';
@@ -205,10 +235,10 @@ $unpackTable[PT_HELLO]              = sub {
     defined($hmm = unpack("x$_[1] C", $_[0])) or return;
     if ($hmm == PT_HELLOCLIENT) {
         my $old_off = $_[1]++;
-        defined($d = &unpackInfo) 
-            && defined($d->{ServerIP} = &unpackD)
-            && defined($d->{ServerPort} = &unpackW)
-            && return $d;
+        $d = &unpackInfo
+            and defined($d->{ServerIP} = &unpackD)
+            and defined($d->{ServerPort} = &unpackW)
+            and return $d;
         # failed, try Hello server
         $_[1] = $old_off;
     }
@@ -217,8 +247,7 @@ $unpackTable[PT_HELLO]              = sub {
 $packTable[PT_HELLO]                = sub {
     my ($d) = @_;
     return $d->{ServerIP} 
-           ? packB(0x10) 
-               . &packInfo
+           ? packB(0x10) . &packInfo 
                . packAddr($d->{ServerIP}, $d->{ServerPort})
            : &packInfo;
 };
@@ -239,6 +268,10 @@ $PacketTagName[PT_SEARCHFILE]       = 'Search file';
 $unpackTable[PT_SEARCHFILE]         = \&unpackSearchQuery;
 $packTable[PT_SEARCHFILE]           = \&packSearchQuery;
 # -------------------------------------------------------------------
+$PacketTagName[PT_DISCONNECT]       = 'Disconnect';
+$unpackTable[PT_DISCONNECT]         = $unpackEmpty;
+$packTable[PT_DISCONNECT]           = $packEmpty;
+# -------------------------------------------------------------------
 $PacketTagName[PT_GETSOURCES]       = 'Get sources';
 $unpackTable[PT_GETSOURCES]         = \&unpackHash;
 $packTable[PT_GETSOURCES]           = \&packHash;
@@ -247,9 +280,9 @@ $PacketTagName[PT_SEARCHUSER]       = 'Search user';
 $unpackTable[PT_SEARCHUSER]         = \&unpackSearchQuery;
 $packTable[PT_SEARCHUSER]           = \&packSearchQuery;
 # -------------------------------------------------------------------
-$PacketTagName[PT_IPREQUEST]        = 'IP(Callback?) request';
-$unpackTable[PT_IPREQUEST]          = \&unpackD;
-$packTable[PT_IPREQUEST]            = \&packD;
+$PacketTagName[PT_CLIENTCBREQ]      = 'Client callback request';
+$unpackTable[PT_CLIENTCBREQ]        = \&unpackD;
+$packTable[PT_CLIENTCBREQ]          = \&packD;
 # -------------------------------------------------------------------
 $PacketTagName[PT_MORERESULTS]      = 'More results';
 $unpackTable[PT_MORERESULTS]        = $unpackEmpty;
@@ -262,7 +295,7 @@ $packTable[PT_SERVERLIST]           = \&packAddrList;
 $PacketTagName[PT_SEARCHFILERES]    = 'Search file results';
 $unpackTable[PT_SEARCHFILERES]      = sub {
     my ($res);
-    defined($res = &unpackInfoList) or return;
+    $res = &unpackInfoList or return;
     &unpackB; # FIXME
     return $res;
 };
@@ -284,13 +317,13 @@ $packTable[PT_SERVERSTATUS]         = sub {
     return pack('LL', @_);
 };
 # -------------------------------------------------------------------
-$PacketTagName[PT_IPREQUESTANS]     = 'IP request answer';
-$unpackTable[PT_IPREQUESTANS]       = \&unpackAddr;
-$packTable[PT_IPREQUESTANS]         = \&packAddr;
+$PacketTagName[PT_SERVERCBREQ]      = 'Server callback request';
+$unpackTable[PT_SERVERCBREQ]        = \&unpackAddr;
+$packTable[PT_SERVERCBREQ]          = \&packAddr;
 # -------------------------------------------------------------------
-$PacketTagName[PT_IPREQUESTFAIL]    = 'IP request fail';
-$unpackTable[PT_IPREQUESTFAIL]      = \&unpackD;
-$packTable[PT_IPREQUESTFAIL]        = \&packD;
+$PacketTagName[PT_CBFAIL]           = 'Callback fail';
+$unpackTable[PT_CBFAIL]             = \&unpackD;
+$packTable[PT_CBFAIL]               = \&packD;
 # -------------------------------------------------------------------
 $PacketTagName[PT_SERVERMESSAGE]    = 'Server message';
 $unpackTable[PT_SERVERMESSAGE]      = \&unpackS;
@@ -308,7 +341,7 @@ $PacketTagName[PT_FOUNDSOURCES]     = 'Found sources';
 my $unpackFoundSources = sub {
     my ($hash, $addrl);
     defined($hash  = &unpackHash) or return;
-    defined($addrl = &unpackAddrList) or return;
+    $addrl = &unpackAddrList or return;
 #    return {Hash => $hash, Addresses => $addrl};
     return ($hash, $addrl);
 };
@@ -347,12 +380,12 @@ $PacketTagName[PT_REQUESTPARTS]     = 'Request parts';
 $unpackTable[PT_REQUESTPARTS]       = sub {
     my ($hash, $o, @start, @end);
     defined($hash   = &unpackHash) or return;
-    defined($o      = &unpackD) && push(@start, $o) or return;
-    defined($o      = &unpackD) && push(@start, $o) or return;
-    defined($o      = &unpackD) && push(@start, $o) or return;
-    defined($o      = &unpackD) && push(@end, $o) or return;
-    defined($o      = &unpackD) && push(@end, $o) or return;
-    defined($o      = &unpackD) && push(@end, $o) or return;
+    defined($o      = &unpackD) and push(@start, $o) or return;
+    defined($o      = &unpackD) and push(@start, $o) or return;
+    defined($o      = &unpackD) and push(@start, $o) or return;
+    defined($o      = &unpackD) and push(@end, $o) or return;
+    defined($o      = &unpackD) and push(@end, $o) or return;
+    defined($o      = &unpackD) and push(@end, $o) or return;
 #    return {Hash => $hash, Gaps => [sort {$a <=> $b} (@start, @end)]};
     return ($hash, sort {$a <=> $b} (@start, @end));
 };
@@ -390,7 +423,7 @@ $packTable[PT_VIEWFILESANS]         = \&packInfoList;
 $PacketTagName[PT_HELLOANSWER]      = 'Hello answer';
 $unpackTable[PT_HELLOANSWER]        = sub {
     my ($uinfo, $sip, $sport);
-    defined($uinfo  = &unpackInfo) or return;
+    $uinfo  = &unpackInfo or return;
     ($uinfo->{ServerIP}, $uinfo->{ServerPort}) = &unpackAddr or return;
     return $uinfo;
 };
@@ -463,8 +496,8 @@ $packTable[PT_HASHSETANSWER]        = sub {
     my ($hash, $parthashes) = @_;
 #    my ($d) = @_;
 #    my $parthashes = $d->{Parthashes};
-#    my $res = packHash($d->{Hash}) . packW(@$parthashes+0);
-    my $res = packHash($hash) . packW(@$parthashes+0);
+#    my $res = packHash($d->{Hash}) . packW(scalar @$parthashes);
+    my $res = packHash($hash) . packW(scalar @$parthashes);
     foreach my $ph (@$parthashes) {
         $res .= packHash($ph);
     }
@@ -506,13 +539,22 @@ $packTable[PT_FILEREQANSWER]        = sub {
 #    return packHash($d->{Hash}) . packS($d->{Name});
 };
 # -------------------------------------------------------------------
+# -------------------------------------------------------------------
 $PacketTagName[PT_UDP_SERVERSTATUSREQ]  = 'UDP Server status request';
-#$unpackTable[PT_UDP_SERVERSTATUSREQ]   = \&;
-#$packTable[PT_UDP_SERVERSTATUSREQ]     = \&;
+$unpackTable[PT_UDP_SERVERSTATUSREQ]    = \&unpackD;
+$packTable[PT_UDP_SERVERSTATUSREQ]      = \&packD;
 # -------------------------------------------------------------------
 $PacketTagName[PT_UDP_SERVERSTATUS]     = 'UDP Server status';
-#$unpackTable[PT_UDP_SERVERSTATUS]      = \&;
-#$packTable[PT_UDP_SERVERSTATUS]        = \&;
+$unpackTable[PT_UDP_SERVERSTATUS]       = sub {
+    my ($ip, $nusers, $nfiles);
+    defined($ip = &unpackD) or return;
+    defined($nusers = &unpackD) or return;
+    defined($nfiles = &unpackD) or return;
+    return ($ip, $nusers, $nfiles);
+};
+$packTable[PT_UDP_SERVERSTATUS]         = sub {
+    return pack('LLL', @_);
+};
 # -------------------------------------------------------------------
 $PacketTagName[PT_UDP_SEARCHFILE]       = 'UDP Search file';
 $unpackTable[PT_UDP_SEARCHFILE]         = \&unpackSearchQuery;
@@ -530,26 +572,49 @@ $PacketTagName[PT_UDP_FOUNDSOURCES]     = 'UDP Found Sources';
 $unpackTable[PT_UDP_FOUNDSOURCES]       = $unpackFoundSources;
 $packTable[PT_UDP_FOUNDSOURCES]         = $packFoundSources;
 # -------------------------------------------------------------------
-$PacketTagName[PT_UDP_CALLBACKREQUEST]  = 'UDP Callback request';
-#$unpackTable[PT_UDP_CALLBACKREQUEST]   = \&;
-#$packTable[PT_UDP_CALLBACKREQUEST]     = \&;
+$PacketTagName[PT_UDP_CBREQUEST]        = 'UDP Callback request';
+$unpackTable[PT_UDP_CBREQUEST]          = sub {
+    my ($ip, $port, $cid);
+    ($ip, $port) = &unpackAddr or return;
+    defined($cid = &unpackD) or return;
+    return ($ip, $port, $cid);
+};
+$packTable[PT_UDP_CBREQUEST]            = sub {
+    my ($ip, $port, $cid) = @_;
+    return packAddr($ip, $port) . packD($cid);
+};
 # -------------------------------------------------------------------
-$PacketTagName[PT_UDP_GETSERVERLIST]    = 'UDP Get server list';
-$unpackTable[PT_UDP_GETSERVERLIST]      = \&unpackAddr;
-$packTable[PT_UDP_GETSERVERLIST]        = \&packAddr;
+$PacketTagName[PT_UDP_CBFAIL]           = 'UDP Callback fail';
+$unpackTable[PT_UDP_CBFAIL]             = \&unpackD;
+$packTable[PT_UDP_CBFAIL]               = \&packD;
+# -------------------------------------------------------------------
+$PacketTagName[PT_UDP_NEWSERVER]       = 'UDP New server';
+$unpackTable[PT_UDP_NEWSERVER]         = \&unpackAddr;
+$packTable[PT_UDP_NEWSERVER]           = \&packAddr;
 # -------------------------------------------------------------------
 $PacketTagName[PT_UDP_SERVERLIST]       = 'UDP Server list';
-$unpackTable[PT_UDP_SERVERLIST]         = sub {
-    my ($sip, $sport, $addrl);
-    ($sip, $sport) = &unpackAddr or return;
-    defined($addrl  = &unpackAddrList) or return;
-    return ($sip, $sport, $addrl);
+$unpackTable[PT_UDP_SERVERLIST]         = \&unpackAddrList;
+$packTable[PT_UDP_SERVERLIST]           = \&packAddrList;
+# -------------------------------------------------------------------
+$PacketTagName[PT_UDP_SERVERINFOREQ]    = 'UDP Server info request';
+$unpackTable[PT_UDP_SERVERINFOREQ]      = $unpackEmpty;
+$packTable[PT_UDP_SERVERINFOREQ]        = $packEmpty;
+# -------------------------------------------------------------------
+$PacketTagName[PT_UDP_SERVERINFO]       = 'UDP Server info';
+$unpackTable[PT_UDP_SERVERINFO]         = sub {
+    my ($name, $desc);
+    defined($name = &unpackS) or return;
+    defined($desc = &unpackS) or return;
+    return ($name, $desc);
 };
-$packTable[PT_UDP_SERVERLIST]           = sub {
-    my ($sip, $sport, $addrl) = @_;
-    return packAddr($sip, $sport) . packAddrList($addrl);
+$packTable[PT_UDP_SERVERINFO]           = sub {
+    my ($name, $desc) = @_;
+    return packS($name) . packS($desc);
 };
 # -------------------------------------------------------------------
+$PacketTagName[PT_UDP_GETSERVERLIST]    = 'UDP Get server list';
+$unpackTable[PT_UDP_GETSERVERLIST]      = $unpackEmpty;
+$packTable[PT_UDP_GETSERVERLIST]        = $packEmpty;
 # -------------------------------------------------------------------
 
 1;
@@ -607,104 +672,6 @@ unpacking packets of eDonkey peer2peer protocol.
     for each packet type.
 
 =over
-
-=item PT_HELLO
-
-=item PT_HELLOSERVER
-
-=item PT_HELLOCLIENT
-
-=item PT_BADPROTOCOL
-
-=item PT_GETSERVERLIST
-
-=item PT_OFFERFILES
-
-=item PT_SEARCHFILE
-
-=item PT_GETSOURCES
-
-=item PT_SEARCHUSER
-
-=item PT_IPREQUEST
-
-=item PT_MORERESULTS
-
-=item PT_SERVERLIST
-
-=item PT_SEARCHFILERES
-
-=item PT_SERVERSTATUS
-
-=item PT_IPREQUESTANS
-
-=item PT_IPREQUESTFAIL
-
-=item PT_SERVERMESSAGE
-
-=item PT_IDCHANGE
-
-=item PT_SERVERINFO
-
-=item PT_FOUNDSOURCES
-
-=item PT_SEARCHUSERRES
-
-=item PT_SENDINGPART
-
-=item PT_REQUESTPARTS
-
-=item PT_NOSUCHFILE
-
-=item PT_ENDOFOWNLOAD
-
-=item PT_VIEWFILES
-
-=item PT_VIEWFILESANS
-
-=item PT_HELLOANSWER
-
-=item PT_NEWCLIENTID
-
-=item PT_MESSAGE
-
-=item PT_FILESTATUSREQ
-
-=item PT_FILESTATUS
-
-=item PT_HASHSETREQUEST
-
-=item PT_HASHSETANSWER
-
-=item PT_UPLOADREQUEST
-
-=item PT_UPLOADACCEPT
-
-=item PT_CANCELTRANSFER
-
-=item PT_OUTOFPARTS
-
-=item PT_FILEREQUEST
-
-=item PT_FILEREQANSWER
-
-=item PT_UDP_SERVERSTATUSREQ
-
-=item PT_UDP_SERVERSTATUS
-
-=item PT_UDP_SEARCHFILE
-
-=item PT_UDP_SEARCHFILERES
-
-=item PT_UDP_GETSOURCES
-
-=item PT_UDP_FOUNDSOURCES
-
-=item PT_UDP_CALLBACKREQUEST
-
-=item PT_UDP_GETSERVERLIST
-
-=item PT_UDP_SERVERLIST
 
 =back
 

@@ -10,14 +10,16 @@ use strict;
 use Tie::IxHash;
 use P2P::pDonkey::Met ':server';
 
-my (%servers, $nserv);
-tie %servers, "Tie::IxHash";
+my $servers;
 
 warn "Usage: $0 <file>\n" unless @ARGV;
 $ARGV[0] or $ARGV[0] = 'server.met';
 
-$nserv = ReadServerMet($ARGV[0], \%servers);
-PrintServerMet(\%servers);
-print "Servers: $nserv\n";
-#WriteServerMet('ss.met', \%servers);
+my $p = readServerMet($ARGV[0]);
+if ($p) {
+    printServerMet($p);
+#    writeServerMet('ss.met', $servers);
+} else {
+    print "$ARGV[0] is not in server.met format\n";
+}
 

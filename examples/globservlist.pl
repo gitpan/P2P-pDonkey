@@ -9,9 +9,9 @@
 use strict;
 use IO::Socket;
 use Sys::Hostname;
-use P2P::pDonkey::Meta qw( :tags makeMeta );
+use P2P::pDonkey::Meta qw( :tags makeMeta idAddr );
 use P2P::pDonkey::Packet ':all';
-use P2P::pDonkey::ServerMet ':all';
+use P2P::pDonkey::Met ':server';
 use P2P::pDonkey::Util ':all';
 use Data::Hexdumper;
 
@@ -20,9 +20,9 @@ use Data::Hexdumper;
 my ($debug, $dump) = (0, 0);
 my $hostname = hostname();
 
-my %servers;
-my $nserv = ReadServerMet('ss.met', \%servers);
-print "Servers: $nserv\n";
+my $servers = readServerMet('ss.met') or die "Can't read 'ss.met'!\n";
+#my $servers = {'176.16.4.244:4661' => makeServerDesc(addr2ip('176.16.4.244'), 4661) };
+#my $servers = {'176.16.5.33:4661' => makeServerDesc(addr2ip('176.16.5.33'), 4661) };
 
 my $localport = 5000;
 
@@ -32,9 +32,12 @@ my $udpsock = new IO::Socket::INET(
         LocalPort => $localport)
     || die "can't open udp socket: $@\n";
 
-my $request = packUDPHeader() . packBody(PT_UDP_GETSERVERLIST, 
-                                         unpack('L', gethostbyname($hostname)),
-                                         $localport);
+my $request = packUDPHeader() . packBody(PT_UDP_GETSERVERLIST); 
+#$request = packUDPHeader() . packBody(PT_UDP_GETSOURCES, '12bcb48689b4508f326a2b31b105dd9f');
+#$request = packUDPHeader() . packBody(PT_UDP_CBREQUEST, addr2ip('176.16.5.33'), 4661, 1);
+#$request = packUDPHeader() . packBody(PT_UDP_SERVERSTATUSREQ, 123456);
+#$request = packUDPHeader() . packBody(PT_UDP_NEWSERVER, 12345, 444);
+#$request = packUDPHeader() . packBody(PT_UDP_GETSERVERLIST);
 #my %searchq = (Type => ST_NAME, Value => 'met');
 #my $request = packUDPHeader() . packBody(PT_UDP_SEARCHFILE, \%searchq);
 #print hexdump(data => $request);
@@ -44,13 +47,12 @@ my $request = packUDPHeader() . packBody(PT_UDP_GETSERVERLIST,
 #for my $kk (0 .. 10) {
 #    RequestServList(unpack('L', gethostbyname('176.16.4.244')), 4661+$kk);
 #}
-foreach my $meta (values %servers) {
-    RequestServList($meta->{IP}{Value}, $meta->{Port}{Value});
+foreach my $s (values %$servers) {
+    RequestServList($s->{IP}, $s->{Port});
 }
 
 $SIG{INT} = sub { 
-    my $nserv = WriteServerMet('ss.met',  \%servers); 
-    print "Written $nserv servers\n";
+    writeServerMet('ss.met',  $servers); 
     exit;
 };
 
@@ -72,35 +74,32 @@ while (defined($peer = $udpsock->recv($response, 20000, 0))) {
     }
 
     # unpack server list
+#    print hexdump(data => $response);
     my @res = unpackBody(\$pt, $response, $off);
     if ($pt != PT_UDP_SERVERLIST) {
         warn "$addr:$port: got packet '", PacketTagName($pt), "'\n";
+#        print join(" ", @res), "\n";
+#        print join(" ", @{$res[1]}), "\n";
         next;
     }
     if (!@res) {
         warn "$addr:$port: incorrect packet data\n";
         next;
     }
-    my ($sip, $sport, $addrl) = @res;
+    my ($addrl) = @res;
 
     # all ok, process server list
     my $nservnew = 0;
     while (@$addrl) {
         my ($meta);
-        ($sip, $sport) = (shift @$addrl, shift, @$addrl);
-        next if $meta = $servers{ip2addr($sip).":$sport"};
+        my ($sip, $sport) = (shift @$addrl, shift, @$addrl);
+        next if $meta = $servers->{idAddr($sip, $sport)};
         $nservnew++;
-        $servers{ip2addr($sip).":$sport"} = {
-            Name => '',
-            Description => '',
-            IP => $sip,
-            Port => $sport,
-            Preference => 0
-            };
+        $servers->{idAddr($sip, $sport)} = makeServerDesc($sip, $sport);
         RequestServList($sip, $sport);
     }
     print "$addr:$port: $nservnew new servers\n";
-    $nserv += $nservnew;
+#    $nserv += $nservnew;
 }
 die "EXIT: $! ::: $@\n";
 exit;

@@ -8,15 +8,14 @@
 
 use strict;
 use P2P::pDonkey::Met ':part';
-use P2P::pDonkey::Meta 'printInfo';
 
 #@ARGV or @ARGV = ('23.part.met');
 die "Usage: $0 <files>\n" unless @ARGV;
 
 foreach my $f (@ARGV) {
-    my $p = ReadPartMet($f);
+    my $p = readPartMet($f);
     if ($p) {
-        printInfo($p);
+        printPartMet($p);
     } else {
         print "$f is not in part.met format\n";
     }

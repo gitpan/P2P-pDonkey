@@ -41,20 +41,19 @@ our %EXPORT_TAGS =
                 packHashList unpackHashList
 
                 packMetaTagName unpackMetaTagName
-                packMeta unpackMeta makeMeta sameMetaType
-                packMetaList unpackMetaList
-                packMetaListU unpackMetaListU
+                packMeta unpackMeta printMeta makeMeta sameMetaType
+                packMetaList unpackMetaList printMetaList
+                packMetaListU unpackMetaListU printMetaListU
 
                 packInfo unpackInfo makeClientInfo makeServerInfo printInfo
-                packInfoList unpackInfoList
+                packInfoList unpackInfoList printInfoList
                 
-                packFileInfo unpackFileInfo makeFileInfo 
-                packFileInfoList unpackFileInfoList
-                makeFileInfoList 
+                packFileInfo unpackFileInfo makeFileInfo
+                packFileInfoList unpackFileInfoList makeFileInfoList
 
                 packSearchQuery unpackSearchQuery matchSearchQuery
 
-                packAddr unpackAddr
+                packAddr unpackAddr printAddr idAddr
                 packAddrList unpackAddrList 
 
                ) ],
@@ -231,6 +230,7 @@ sub unpackHash {
 sub unpackHashList {
     my ($n, @res, $hash);
     defined($n = &unpackW) or return;
+    @res = ();
     while ($n--) {
         defined($hash = &unpackHash) or return;
         push @res, $hash;
@@ -260,7 +260,7 @@ sub packHash {
 sub packHashList {
     my ($l) = @_;
     my ($res, $hash);
-    $res = packW(@$l+0);
+    $res = packW(scalar @$l);
     foreach $hash (@$l) {
         $res .= packHash($hash);
     }
@@ -269,15 +269,17 @@ sub packHashList {
 
 # Meta Tag
 sub makeMeta {
-    my ($st, $value, $name) = @_;
-    my $vt;
-    if ($st == TT_NAME || $st == TT_DESCRIPTION 
+    my ($st, $value, $name, $vt) = @_;
+    if ($st) {
+        if ($st == TT_NAME || $st == TT_DESCRIPTION 
             || $st == TT_TYPE || $st == TT_FORMAT
             || $st == TT_TEMPFILE) {
-        $vt = VT_STRING;
-    } else {
-        $vt = VT_INTEGER;
+            $vt = VT_STRING;
+        } else {
+            $vt = VT_INTEGER;
+        }
     }
+    confess "Value type is undefined" unless defined $vt;
     return {Type => $st, ValType => $vt, Value => $value, 
             Name => $st ? MetaTagName($st) : $name};
 }
@@ -306,6 +308,8 @@ sub unpackMetaTagName {
         } else {
             $st = TT_UNDEFINED;
         }
+    } else {
+        $st = TT_UNDEFINED;
     }
     return {Type => $st, Name => $name};
 }
@@ -324,8 +328,8 @@ sub packMetaTagName {
 sub unpackMeta {
     my ($vt, $val, $meta);
 
-    defined($vt     = &unpackB) or return;
-    defined($meta   = &unpackMetaTagName) or return;
+    defined($vt = &unpackB) or return;
+    $meta = &unpackMetaTagName or return;
 
     if ($vt == VT_STRING) {
         $val = &unpackS;
@@ -357,14 +361,18 @@ sub packMeta {
     }
     return $res;
 }
+sub printMeta {
+    my ($m) = @_;
+    print $m->{Name}, ': ', ($m->{Type} == TT_IP ? ip2addr($m->{Value}) : $m->{Value});
+}
 
 # list of references to meta tags
 sub unpackMetaList {
     my ($ntags, @res, $meta);
-
     defined($ntags = &unpackD) or return;
+    @res = ();
     while ($ntags--) {
-        defined($meta = &unpackMeta) or return;
+        $meta = &unpackMeta or return;
         push @res, $meta;
     }
     return \@res;
@@ -372,11 +380,19 @@ sub unpackMetaList {
 sub packMetaList {
     my ($l) = @_;
     my ($res, $meta);
-    $res = packD(@$l+0);
+    $res = packD(scalar @$l);
     foreach $meta (@$l) {
         $res .= packMeta($meta);
     }
     return $res;
+}
+sub printMetaList {
+    my ($l) = @_;
+    foreach my $m (@$l) {
+        print "\t";
+        printMeta($m);
+        print "\n";
+    }
 }
 
 # hash of references to meta
@@ -385,8 +401,9 @@ sub unpackMetaListU {
 
     tie %res, "Tie::IxHash";
     defined($ntags = &unpackD) or return;
+    %res = ();
     while ($ntags--) {
-        defined($meta = &unpackMeta) or return;
+        $meta = &unpackMeta or return;
         $res{$meta->{Name}} = $meta;
     }
     return \%res;
@@ -400,6 +417,14 @@ sub packMetaListU {
         $ntags++;
     }
     return packD($ntags) . $res;
+}
+sub printMetaListU {
+    my ($l) = @_;
+    foreach my $m (values %$l) {
+        print "\t";
+        printMeta($m);
+        print "\n";
+    }
 }
 
 sub MetaList2MetaListU {
@@ -420,22 +445,23 @@ sub MetaListU2MetaList {
 sub unpackInfo {
     my ($hash, $ip, $port, $meta);
     defined($hash = &unpackHash) or return;
-    (($ip, $port) = &unpackAddr) or return;
-    defined($meta = &unpackMetaListU) or return;
+    ($ip, $port) = &unpackAddr or return;
+    $meta = &unpackMetaListU or return;
     return {Hash => $hash, IP => $ip, Port => $port, Meta => $meta};
 }
 
 sub packInfo {
     my ($d) = @_;
-    return packHash($d->{Hash}) . packAddr($d->{IP}, $d->{Port}) 
+    return packHash($d->{Hash}) . packAddr($d) 
         . packMetaListU($d->{Meta});
 }
 
 sub unpackInfoList {
     my ($nres, @res, $info);
     defined($nres   = &unpackD) or return;
+    @res = ();
     while ($nres--) {
-        defined($info = &unpackInfo) or return;
+        $info = &unpackInfo or return;
         push @res, $info;
     }
     return \@res;
@@ -444,11 +470,17 @@ sub unpackInfoList {
 sub packInfoList {
     my ($l) = @_;
     my ($res, $info);
-    $res = packD(@$l+0);
+    $res = packD(scalar @$l);
     foreach $info (@$l) {
         $res .= packInfo($info);
     }
     return $res;
+}
+
+sub printInfoList {
+    foreach my $i (@{$_[0]}) {
+        printInfo($i);
+    }
 }
 
 sub makeClientInfo {
@@ -472,13 +504,57 @@ sub makeServerInfo {
     return {Hash => $hash, IP => $ip, Port => $port, Meta => \%meta};
 }
 
+sub printInfo {
+    my ($info) = @_;
+    $info or return;
+
+    if (defined $info->{Date}) {
+        print "Date: ", scalar(localtime($info->{Date})), "\n";
+    }
+
+    if (defined $info->{IP}) {
+        print "Address: ";
+        printAddr($info);
+        print "\n";
+    }
+
+    if (defined $info->{Hash}) {
+        print "Hash: $info->{Hash}\n";
+    }
+
+    if ($info->{Parts}) {
+        print "Parts:\n";
+        my $i = 0;
+        foreach my $parthash (@{$info->{Parts}}) {
+            print "\t$i: $parthash\n";
+            $i++;
+        }
+    }
+
+    if ($info->{Gaps}) {
+        print "Gaps:\n";
+        my $gaps = $info->{Gaps};
+        for (my $i = 0; $i < @$gaps/2; $i += 2) {
+            print "\t$gaps->[$i] - $gaps->[$i+1]\n";
+        }
+    }
+
+    if ($info->{Meta}) {
+        my ($name, $meta);
+        print "Meta:\n";
+        while (($name, $meta) = each %{$info->{Meta}}) {
+            print "\t$name: $meta->{Value}\n";
+        }
+    }
+}
+
 # file info
 sub unpackFileInfo {
     my (%res, $metas, %tags, @gaps);
-    defined($res{Date}  = &unpackD) || return;
-    defined($res{Hash}  = &unpackHash) || return;
-    defined($res{Parts} = &unpackHashList) || return;
-    defined($metas  = &unpackMetaList) || return;
+    defined($res{Date}  = &unpackD) or return;
+    defined($res{Hash}  = &unpackHash) or return;
+    $res{Parts} = &unpackHashList or return;
+    $metas      = &unpackMetaList or return;
 
     tie %tags, "Tie::IxHash";
     foreach my $meta (@$metas) {
@@ -511,8 +587,9 @@ sub packFileInfo {
 sub unpackFileInfoList {
     my ($nres, @res, $info);
     defined($nres   = &unpackD) or return;
+    @res = ();
     while ($nres--) {
-        defined($info = &unpackFileInfo) or return;
+        $info = &unpackFileInfo or return;
         push @res, $info;
     }
     return \@res;
@@ -521,7 +598,7 @@ sub unpackFileInfoList {
 sub packFileInfoList {
     my ($l) = @_;
     my ($res, $info);
-    $res = packD(@$l+0);;
+    $res = packD(scalar @$l);;
     foreach $info (@$l) {
         $res .= packFileInfo($info);
     }
@@ -577,8 +654,6 @@ sub makeFileInfo {
     binmode(HANDLE);
 
     $context = new Digest::MD4;
-    $context->addfile(\*HANDLE);
-    $hash = $context->hexdigest();
 
     my @parts = ();
     if ($size > SZ_FILEPART) {
@@ -588,8 +663,12 @@ sub makeFileInfo {
         for (my $i = 0; $i < $nparts; $i++) {
             read(HANDLE, $part, SZ_FILEPART);
             push @parts, Digest::MD4->hexhash($part);
+            $context->add($part);
         }
+    } else {
+        $context->addfile(\*HANDLE);
     }
+    $hash = $context->hexdigest();
     
     close HANDLE;
 
@@ -606,52 +685,6 @@ sub makeFileInfoList {
     return \@res;
 }
 
-sub printInfo {
-    my ($info) = @_;
-    $info or return;
-
-    if (defined $info->{Date}) {
-        print "Date: ", scalar(localtime($info->{Date})), "\n";
-    }
-
-    if (defined $info->{IP}) {
-        print "IP: ", ip2addr($info->{IP}), "\n";
-    }
-
-    if (defined $info->{Port}) {
-        print "Port: $info->{Port}\n";
-    }
-
-    if (defined $info->{Hash}) {
-        print "Hash: $info->{Hash}\n";
-    }
-
-    if ($info->{Parts}) {
-        print "Parts:\n";
-        my $i = 0;
-        foreach my $parthash (@{$info->{Parts}}) {
-            print "\t$i: $parthash\n";
-            $i++;
-        }
-    }
-
-    if ($info->{Gaps}) {
-        print "Gaps:\n";
-        my $gaps = $info->{Gaps};
-        for (my $i = 0; $i < @$gaps/2; $i += 2) {
-            print "\t$gaps->[$i] - $gaps->[$i+1]\n";
-        }
-    }
-
-    if ($info->{Meta}) {
-        my ($name, $meta);
-        print "Meta:\n";
-        while (($name, $meta) = each %{$info->{Meta}}) {
-            print "\t$name: $meta->{Value}\n";
-        }
-    }
-}
-
 # search query
 sub unpackSearchQuery {
     my ($t);
@@ -659,9 +692,9 @@ sub unpackSearchQuery {
 
     if ($t == ST_COMBINE) {
         my ($op, $exp1, $exp2);
-        defined($op     = &unpackB) or return;
-        defined($exp1   = &unpackSearchQuery) or return;
-        defined($exp2   = &unpackSearchQuery) or return;
+        defined($op = &unpackB) or return;
+        $exp1 = &unpackSearchQuery or return;
+        $exp2 = &unpackSearchQuery or return;
         return {Type => $t, Op => $op, Q1 => $exp1, Q2 => $exp2};
 
     } elsif ($t == ST_NAME) {
@@ -671,8 +704,8 @@ sub unpackSearchQuery {
 
     } elsif ($t == ST_META) {
         my ($val, $metaname);
-        defined($val      = &unpackS) or return;
-        defined($metaname = &unpackMetaTagName) or return;
+        defined($val = &unpackS) or return;
+        $metaname = &unpackMetaTagName or return;
         return {Type => $t, Value => $val, MetaName => $metaname};
 
     } elsif ($t == ST_MINMAX) {
@@ -680,7 +713,7 @@ sub unpackSearchQuery {
         defined($val      = &unpackD) or return;
         defined($comp     = &unpackB) or return;
         ($comp == ST_MIN || $comp == ST_MAX) or return;
-        defined($metaname = &unpackMetaTagName) or return; 
+        $metaname = &unpackMetaTagName or return; 
         return {Type => $t, Value => $val, Compare => $comp, MetaName => $metaname};
 
     } else {
@@ -766,7 +799,7 @@ sub unpackAddrList {
     my ($snum, $ip, $port, @res);
 
     defined($snum = &unpackB) or return;
-
+    @res = ();
     while ($snum--) {
         defined($ip   = &unpackD) or return;
         defined($port = &unpackW) or return;
@@ -788,7 +821,30 @@ sub unpackAddr {
 }
 
 sub packAddr {
-    return pack('LS', @_);
+    my ($p) = @_;
+    if (ref $p) {
+        return pack('LS', $p->{IP}, $p->{Port});
+    } else {
+        return pack('LS', @_);
+    }
+}
+
+sub printAddr {
+    my ($ip, $port) = @_;
+    if (ref $ip && !defined $port) {
+        print ip2addr($ip->{IP}), ':', $ip->{Port};
+    } else {
+        print ip2addr($ip), ':', $port;
+    }
+}
+
+sub idAddr {
+    my ($ip, $port) = @_;
+    if (ref $ip && !defined $port) {
+        return $ip->{IP}.':'.$ip->{Port};
+    } else {
+        return "$ip:$port";
+    }
 }
 
 1;
