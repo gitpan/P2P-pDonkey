@@ -118,7 +118,8 @@ sub unpackServerDesc {
     my ($ip, $port, $meta);
     ($ip, $port) = &unpackAddr or return;
     $meta = &unpackMetaListU or return;
-    return {IP => $ip, Port => $port, Meta => $meta};
+    # Hash is for compatibility with Info structure
+    return {Hash => '01234567012345670123456701234567', IP => $ip, Port => $port, Meta => $meta};
 }
 sub packServerDesc {
     my ($d) = @_;
@@ -145,7 +146,7 @@ sub makeServerDesc {
     $meta{users}        = makeMeta(TT_UNDEFINED, $nusers, "users", VT_INTEGER) if defined $nusers;
     $meta{files}        = makeMeta(TT_UNDEFINED, $nfiles, "files", VT_INTEGER) if defined $nfiles;
     $meta{Preference}   = makeMeta(TT_PREFERENCE, $preference);
-    return {IP => $ip, Port => $port, Meta => \%meta};
+    return {Hash => '01234567012345670123456701234567', IP => $ip, Port => $port, Meta => \%meta};
 }
 
 sub unpackServerDescList {
@@ -251,6 +252,7 @@ sub readPartMet {
     $buf = &$readFile($fname, MT_PARTMET) or return;
     $off = 0;
     $res = unpackPartMet($$buf, $off);
+    $res->{Path} = $fname;
     if ($res && $off != length $$buf) {
         warn "Unhandled bytes at the end:\n", hexdump(data=>$$buf, start_position=>$off);
     }
@@ -349,26 +351,45 @@ eDonkey peer2peer protocol.
 
 =head1 SYNOPSIS
 
-    use Tie::IxHash;
-    use P2P::pDonkey::Met ':all';
+    use P2P::pDonkey::Met ':server';
+    my $servers;
+    my $p = readServerMet($ARGV[0]);
+    if ($p) {
+        printServerMet($p);
+    } else {
+        print "$ARGV[0] is not in server.met format\n";
+    }
 
     ...
 
-    my (%servers, $nserv);
-    tie %servers, "Tie::IxHash";
-    $nserv = ReadServerMet($ARGV[0] || 'server.met', \%servers);
-    PrintServerMet(\%servers);
-    print "Servers: $nserv\n";
-
-    ...
-
+    use P2P::pDonkey::Met ':part';
     foreach my $f (@ARGV) {
-        my $p = ReadPartMet($f);
+        my $p = readPartMet($f);
         if ($p) {
-            printInfo($p);
+            printPartMet($p);
         } else {
             print "$f is not in part.met format\n";
         }
+    }
+
+    ...
+
+    use P2P::pDonkey::Met ':known';
+    my $p = readKnownMet($ARGV[0]);
+    if ($p) {
+        printKnownMet($p);
+    } else {
+        print "$ARGV[0] is not in known.met format\n";
+    }
+
+    ...
+
+    use P2P::pDonkey::Met ':pref';
+    my $p = readPrefMet($ARGV[0]);
+    if ($p) {
+        printPrefMet($p);
+    } else {
+        print "$ARGV[0] is not in pref.met format\n";
     }
 
 =head1 DESCRIPTION
@@ -376,19 +397,164 @@ eDonkey peer2peer protocol.
 The module provides functions for reading, printing and writing *.met
 files of eDonkey peer2peer protocol.
 
-C<P2P::pDonkey::Met> provides the following subroutines:
+C<P2P::pDonkey::Met> provides the subroutines for four types of met files:
+F<server.met>, F<...part.met>, F<known.met>, F<pref.met>.
+
+=head2 server.met
+
+Functions are tagged with ':server'.
 
 =over 4
 
-=item ReadServerMet
+=item unpackServerDesc($buffer, $offset)
 
-=item WriteServerMet
+    Returns reference to unpacked server description structure.
 
-=item PrintServerMet
+=item packServerDesc($p)
 
-=item ReadPartMet
+    Returns packed string for description $$p.
 
-=item WritePartMet - not yet
+=item printServerDesc($p)
+
+    Prints server description to STDOUT.
+
+=item makeServerDesc($ip, $port, $name, $desc, $nusers, $nfiles, $preference)
+
+    Returns reference to new server description structure. 
+
+=item unpackServerDescList($buffer, $offset)
+
+    Returns reference to list of server descriptions.
+
+=item packServerDescList($l)
+
+    Returns packed string for list of descriptions @$l.
+
+=item printServerDescList($l)
+
+    Prints items of list @$l to STDOUT.
+
+=item unpackServerDescListU($buffer, $offset)
+
+    Returns reference to hash of server descriptions. Keys are idAddr($ip, $port).
+
+=item packServerDescListU($h)
+
+    Returns packed string for hash of descriptions %$h.
+
+=item printServerDescListU($h)
+
+    Prints values of hash %$h to STDOUT.
+
+=item unpackServerMet($buffer, $offset)
+
+    Returns reference to hash of server descriptions.
+
+=item packServerMet($h)
+
+    Returns packed string in server.met file format.
+
+=item printServerMet($buffer, $offset)
+
+    Alias to printServerDescListU($buffer, $offset).
+
+=item readServerMet($filename)
+
+    Reads file and unpacks data with unpackServerMet() function.
+
+=item writeServerMet($filename, $h)
+
+    Packs %$h with packServerMet() function and writes to file.
+
+=back
+
+=head2 ...part.met
+
+Functions are tagged with ':part'.
+
+=over 4
+
+=item unpackPartMet($buffer, $offset)
+
+    Returns reference to file information structure.
+    
+=item packPartMet($p)
+    
+    Returns packed string in part.met format.
+
+=item printPartMet($p)
+
+    Prints file information to STDOUT.
+    
+=item readPartMet($filename)
+
+    Reads file and unpacks data with unpackPartMet() function.
+
+=item writePartMet($filename, $p)
+
+    Packs $$p with packPartMet() function and writes to file.
+
+=back
+
+=head2 known.met
+
+Functions are tagged with ':known'.
+
+=over 4
+
+=item unpackKnownMet($buffer, $offset)
+
+    Returns reference to list of file information structures.
+    
+=item packKnownMet($l)
+    
+    Returns packed string in known.met format.
+
+=item printKnownMet($l)
+
+    Prints elements of list @$l to STDOUT.
+    
+=item readKnownMet($filename)
+
+    Reads file and unpacks data with unpackKnownMet() function.
+
+=item writeKnownMet($filename, $l)
+
+    Packs @$p with packKnownMet() function and writes to file.
+
+=back
+
+=head2 pref.met
+
+Functions are tagged with ':pref'.
+
+=over 4
+
+=item unpackPrefMet($buffer, $offset)
+
+    Returns reference to hash:
+
+        IP => $ip 
+        Port => $port 
+        Hash => $hash 
+        Meta => $meta 
+        Pref => $pref
+    
+=item packPrefMet($p)
+    
+    Returns packed string in pref.met format.
+
+=item printPrefMet($p)
+
+    Print file information to STDOUT.
+    
+=item readPrefMet($filename)
+
+    Reads file and unpacks data with unpackPrefMet() function.
+
+=item writePrefMet($filename, $p)
+
+    Packs $$p with packPrefMet() function and writes to file.
 
 =back
 
@@ -403,7 +569,7 @@ Alexey Klimkin, E<lt>klimkin@mail.ruE<gt>
 
 =head1 SEE ALSO
 
-L<perl>.
+L<perl>, L<P2P::pDonkey::Meta>.
 
 eDonkey home:
 

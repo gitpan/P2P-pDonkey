@@ -19,6 +19,28 @@ our %EXPORT_TAGS =
 ( 'all' => [ qw(
                 MetaTagName
 
+                DLS_HASHING
+                DLS_QUEUED
+                DLS_LOOKING
+                DLS_DOWNLOADING
+                DLS_PAUSED
+                DLS_IDS
+                DLS_NOSOURCES
+                DLS_DONE
+                DLS_HASHING2
+                DLS_ERRORLOADING
+                DLS_COMPLETING
+                DLS_COMPLETE
+                DLS_CORRUPTED
+                DLS_ERRORHASHING
+                DLS_TRANSFERRING
+                FPRI_LOW
+                FPRI_NORMAL
+                FPRI_HIGH
+                SPRI_LOW
+                SPRI_NORMAL
+                SPRI_HIGH
+
                 SZ_FILEPART
 
                 VT_STRING VT_INTEGER 
@@ -37,6 +59,7 @@ our %EXPORT_TAGS =
                 packD unpackD
                 packF unpackF
                 packS unpackS
+                packSList unpackSList
                 packHash unpackHash
                 packHashList unpackHashList
 
@@ -100,6 +123,31 @@ my @MetaTagName;
 sub MetaTagName {
     return $MetaTagName[$_[0]];
 }
+
+# --- Download status byte
+use constant DLS_HASHING        => 0x00;
+use constant DLS_QUEUED         => 0x01;
+use constant DLS_LOOKING        => 0x02;
+use constant DLS_DOWNLOADING    => 0x03;
+use constant DLS_PAUSED         => 0x04;
+use constant DLS_IDS            => 0x05;
+use constant DLS_NOSOURCES      => 0x06;
+use constant DLS_DONE           => 0x07;
+use constant DLS_HASHING2       => 0x08;
+use constant DLS_ERRORLOADING   => 0x09;
+use constant DLS_COMPLETING     => 0x0a;
+use constant DLS_COMPLETE       => 0x0b;
+use constant DLS_CORRUPTED      => 0x0c;
+use constant DLS_ERRORHASHING   => 0x0d;
+use constant DLS_TRANSFERRING   => 0x0e;
+# --- File priority
+use constant FPRI_LOW           => 0x00;
+use constant FPRI_NORMAL        => 0x01;
+use constant FPRI_HIGH          => 0x02;
+# --- Server priority
+use constant SPRI_LOW           => 0x02;
+use constant SPRI_NORMAL        => 0x00;
+use constant SPRI_HIGH          => 0x01;
 
 use constant SZ_FILEPART        => 9500*1024;
 
@@ -220,6 +268,17 @@ sub unpackS {
     return $res;
 }
 
+sub unpackSList {
+    my (@res, $len, $s);
+    @res = ();
+    defined($len = &unpackW) or return;
+    while ($len--) {
+        defined($s = &unpackS) or return;
+        push @res, $s;
+    }
+    return \@res;
+}
+
 sub unpackHash {
     my $res = unpack("x$_[1] H32", $_[0]);
     length($res) == 32 or return;
@@ -253,6 +312,15 @@ sub packF {
 }
 sub packS {
     return pack('Sa*', length $_[0], $_[0]);
+}
+sub packSList {
+    my ($l) = @_;
+    my ($res, $s);
+    $res = packW(scalar @$l);
+    foreach $s (@$l) {
+        $res .= packS($s);
+    }
+    return $res;
 }
 sub packHash {
     return pack('H32', $_[0]);
@@ -582,6 +650,8 @@ sub packFileInfo {
     for (my ($i, $n) = (0, 0); $i < $ngaps; $i += 2, $n++) {
         push @$metas, makeMeta(TT_GAPEND, $gaps->[$i+1], $i);
     }
+    $res .= packMetaList($metas);
+    return $res;
 }
 
 sub unpackFileInfoList {

@@ -12,22 +12,25 @@ use Tie::RefHash;
 use P2P::pDonkey::Meta ':all';
 use P2P::pDonkey::Util ':all';
 use P2P::pDonkey::Packet ':all';
-use P2P::pDonkey::Met qw(ReadServerMet WriteServerMet);
+use P2P::pDonkey::Met ':server';
 use ServBase;
 
 my ($debug, $dump) = (1, 0);
 
 my $user = makeClientInfo(0, 4662, 'Muxer', 60);
 
-my ($nserv, %servers);
-$nserv = ReadServerMet('ss.met', \%servers);
-#$servers{'176.16.4.244:4661'} = {IP => addr2ip('176.16.4.244'), Port => 4661};
-print "Servers: $nserv\n";
+my $servers = readServerMet('ss.met') or die "Can't read file with server list!\n";
+#my $servers = {idAddr(addr2ip('176.16.4.244'),4661) => makeServerDesc(addr2ip('176.16.4.244'), 4661) };
+#my $servers = {idAddr(addr2ip('217.128.63.252'),4661) => makeServerDesc(addr2ip('217.128.63.252'), 4661) };
+#my $servers = {idAddr(addr2ip('80.130.53.117'),4661) => makeServerDesc(addr2ip('80.130.53.117'), 4661) };
 
 my @procTable;
 $procTable[PT_SERVERLIST]   = \&processServerList;
+$procTable[PT_SERVERINFO]   = \&processServerInfo;
+$procTable[PT_SERVERSTATUS] = \&processServerStatus;
 
-my $server = new ServBase(ProcTable => \@procTable,
+my $server = new ServBase(ProxyAddr => '192.168.3.2', ProxyPort => 8080,
+                          ProcTable => \@procTable,
                           OnConnect => \&OnConnect,
                           Dump => $dump);
 
@@ -38,13 +41,12 @@ $IN->blocking(0);
 $server->watch($IN);
 
 $SIG{INT} = sub { 
-    my $nserv = WriteServerMet('ss.met',  \%servers); 
-    print "Written $nserv servers\n";
+    writeServerMet('ss.met',  $servers); 
     exit;
 };
 
-foreach my $s (values %servers) {
-    $server->Connect(ip2addr($s->{IP}{Value}), $s->{Port}{Value}) || warn "Connect: $!";;
+foreach my $s (values %$servers) {
+    $server->Connect(ip2addr($s->{IP}), $s->{Port}) || warn "Connect: $!";;
 }
 #$server->Connect('176.16.4.244', 4661) || warn "Connect: $!";
 $server->MainLoop() || die "Can't start server: $!\n";
@@ -53,26 +55,51 @@ exit;
 
 sub OnConnect {
     my ($conn) = @_;
+    $conn->{InfoCnt} = 3;
     $server->Queue($conn, PT_HELLO, $user);
     $server->Queue($conn, PT_GETSERVERLIST, '');
+}
+
+sub processServerStatus {
+    my ($conn, $nusers, $nfiles) = @_;
+    my $sinfo = $servers->{idAddr($conn)};
+    $sinfo or die "Internal error";
+    $sinfo->{Meta}->{users} = makeMeta(TT_UNDEFINED, $nusers, 'users', VT_INTEGER);
+    $sinfo->{Meta}->{files} = makeMeta(TT_UNDEFINED, $nfiles, 'files', VT_INTEGER);
+
+    $conn->{InfoCnt}--;
+    $server->Disconnect($conn->{Socket}) unless $conn->{InfoCnt};
+}
+
+sub processServerInfo {
+    my ($conn, $d) = @_;
+    my $m = $d->{Meta};
+    if ($m) {
+        my $sinfo = $servers->{idAddr($conn)};
+        $sinfo or die "Internal error";
+        $sinfo->{Meta}->{Name} = $m->{Name} if ($m->{Name});
+        $sinfo->{Meta}->{Description} = $m->{Description} if ($m->{Description});
+    }
+
+    $conn->{InfoCnt}--;
+    $server->Disconnect($conn->{Socket}) unless $conn->{InfoCnt};
 }
 
 sub processServerList {
     my ($conn, $d) = @_;
     my ($ip, $port);
 
-    my $snum = @$d/2;
-    print "\tGot $snum servers:\n";
-
+    my $nservnew = 0;
     while (@$d) {
         $ip   = shift @$d;
         $port = shift @$d;
-        print "\t", ip2addr($ip), ":$port\n" if $debug;
-        $servers{ip2addr($ip).":$port"} = [
-            IP   => makeMeta(TT_IP, $ip),
-            Port => makeMeta(TT_PORT, $port)
-            ];
+        next if $servers->{idAddr($ip, $port)};
+        $nservnew++;
+        $servers->{idAddr($ip, $port)} = makeServerDesc($ip, $port);
         $server->Connect(ip2addr($ip), $port) || warn "Connect: $!";
     }
-    $server->Disconnect($conn->{Socket});
+    print "$nservnew new servers\n";
+
+    $conn->{InfoCnt}--;
+    $server->Disconnect($conn->{Socket}) unless $conn->{InfoCnt};
 }

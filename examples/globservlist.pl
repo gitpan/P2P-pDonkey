@@ -57,7 +57,9 @@ $SIG{INT} = sub {
 };
 
 my ($response, $peer);
-while (defined($peer = $udpsock->recv($response, 20000, 0))) {
+while (1) {
+    defined($peer = $udpsock->recv($response, 20000, 0)) or next;
+
     my ($port, $addr) = sockaddr_in($peer);
     $addr = inet_ntoa($addr);
     

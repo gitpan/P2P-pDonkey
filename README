@@ -1,5 +1,5 @@
-P2P::pDonkey version 0.01
-====================
+P2P::pDonkey version 0.03
+=========================
 
 pDonkey is the set of tools, written in perl, for manipulating 
 eDonkey peer2peer protocol. The main goal of project is to create 
@@ -32,20 +32,17 @@ DEPENDENCIES
 
     Carp
     Digest::MD4
+    Data::Hexdumper
     File::Basename
     File::Find
     File::Glob
-    Socket
-    Tie::IxHash
-    Video::Info
-
-  Examples requires:
-
-    Data::Hexdumper
     IO::Select
     IO::Socket
     POSIX
+    Socket
     Sys::Hostname
+    Tie::IxHash
+    Video::Info
 
 COPYRIGHT AND LICENCE
 
