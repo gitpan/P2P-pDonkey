@@ -1,0 +1,265 @@
+                 eDonkey Protocol v0.3
+
+    Copyright (c) 2002 Alexey Klimkin <klimkin@mail.ru>
+===========================================================
+            
+
+Used the following sources in time order:
+
+http://hitech.dk/donkeyprotocol.html
+http://www.schrevel.com/edonkey/
+http://www.emule-project.net/
+http://www.nongnu.org/mldonkey/
+
+
+Content
+===========================================================
+
+1. Network protocol
+2. server.met
+3. part.met
+4. known.met
+5. pref.met
+6. Changes
+
+
+1. Network protocol
+===========================================================
+
+                   Client <-> Server
+      -------------------------------------------
+0x01          Hello server ->
+0x40                      <-  ID change
+0x15          Offer files  ->
+0x14      Get server list  ->
+0x38                      <-  Server message
+0x32                      <-  Server list
+0x41                      <-  Server info
+0x34                      <-  Server status
+0x16          Search file  ->
+0x33                      <-  Search file results
+0x21         More results  ->
+0x19          Get sources  ->
+0x42                      <-  Found sources
+0x1a          Search user  ->
+0x43                      <-  Search user results
+0x1c           IP request  ->
+0x35                      <-  IP request answer
+0x36                      <-  IP request fail
+0x4d                      <-  New client ID
+0x1d       Get chat rooms  ->
+0x39                      <-  Chat rooms
+0x1f            Join room  ->
+0x1e         Chat message  ->
+0x3a                      <-  Chat broadcast
+0x3b                      <-  Chat join
+0x3c                      <-  Chat leave
+0x3d                      <-  Chat users
+      -------------------------------------------
+
+                   Client <-> Client
+      -------------------------------------------
+0x01          Hello client ->
+0x4c                      <-  Hello answer
+0x58         File request  ->
+0x59                      <-  File request answer
+0x48                      <-  No such file
+0x4f  File status request  ->
+0x50                      <-  File status
+0x51      Hashset request  ->
+0x52                      <-  Hashset answer
+0x54       Upload request  ->
+0x55                      <-  Upload accept
+0x47        Request parts  ->
+0x46                      <-  Sending part
+0x49                      <-  End of download
+0x56      Cancel transfer  ->
+0x57                      <-  Out of parts
+0x4a           View files  ->
+0x4b                      <-  View files answer
+0x4e              Message  ->
+0x4e                      <-  Message
+      -------------------------------------------
+
+
+<Hello server>          ::= 0x01 <Client info>
+<Hello client>          ::= 0x01 0x10 <Client info> <Server address>
+
+    Client <-> Server
+-------------------------
+<?>                     ::= 0x05 ?
+<Get server list>       ::= 0x14
+<Offer files>           ::= 0x15 <File info list>
+<Search file>           ::= 0x16 <Search query> 
+<Get sources>           ::= 0x19 <File hash>
+<Search user>           ::= 0x1a <Search query>
+<IP request>            ::= 0x1c <Client ID>
+<Get chat rooms>        ::= 0x1d ?
+<Chat message>          ::= 0x1e ?
+<Join room>             ::= 0x1f ?
+<More results>          ::= 0x21
+<Server list>           ::= 0x32 <Address list>
+<Search file results>   ::= 0x33 <File info list>
+<Server status>         ::= 0x34 <Nusers> <Nfiles>
+<IP request answer>     ::= 0x35 <Client Address>
+<IP request fail>       ::= 0x36 <Client ID>
+<Server message>        ::= 0x38 <String>
+<Chat rooms>            ::= 0x39 BYTE (<String> DWORD)*
+<Chat broadcast>        ::= 0x3a ?
+<Chat join>             ::= 0x3b ?
+<Chat leave>            ::= 0x3c ?
+<Chat users>            ::= 0x3d ?
+<ID change>             ::= 0x40 <Client ID>
+<Server info>           ::= 0x41 <Server info>
+<Found sources>         ::= 0x42 <File hash> <Address list> // ID list actually
+<Search user results>   ::= 0x43 <Client info list>
+
+    Client <-> Client
+-------------------------
+<Sending part>          ::= 0x46 <File hash> <Data range> DATA
+<Request parts>         ::= 0x47 <File hash> 
+                                 <Start offset> <Start offset> <Start offset>
+                                 <End offset>   <End offset>   <End offset>
+<No such file>          ::= 0x48 <File hash>
+<End of download>       ::= 0x49 <File hash>
+<View files>            ::= 0x4a
+<View files answer>     ::= 0x4b <File info list>
+<Hello answer>          ::= 0x4c <Client info> <Server address>
+<New cliend ID>         ::= 0x4d <Cliend ID> <Client ID>    // change low id to high
+<Message>               ::= 0x4e <String>
+<File status request>   ::= 0x4f <File hash>
+<File status>           ::= 0x50 <File hash> <Part status list>
+<Hashset request>       ::= 0x51 <File hash>
+<Hashset answer>        ::= 0x52 <File hash> <Part hash list>
+<?>                     ::= 0x53 ?
+<Upload request>        ::= 0x54
+<Upload accept>         ::= 0x55
+<Cancel transfer>       ::= 0x56
+<Out of parts>          ::= 0x57
+<File request>          ::= 0x58 <File hash>
+<File request answer>   ::= 0x59 <File hash> <File name>
+
+           UDP
+-------------------------
+<UDP Server status request> ::= 0x96 DWORD??
+<UDP Server status>         ::= 0x97 DWORD?? Nusers Nfiles
+<UDP Search file>           ::= 0x98 <Search query>
+<UDP Search file result>    ::= 0x99 <File info>
+<UDP Get sources>           ::= 0x9a <File hash>
+<UDP Found sources>         ::= 0x9b <File hash> <Address list>
+<UDP Callback request>      ::= 0x9c <Address> <Client ID>
+<UDP Get server list>       ::= 0xa0 <Address>
+<UDP Server list>           ::= 0xa1 <Address> <Address list>
+<UDP Get server info>       ::= 0xa2 ?
+<UDP Server info>           ::= 0xa3 ?
+<UDP ?>                     ::= 0xa4 ?
+
+<Search query>      ::= 0x00 <Operator> <Search query> <Search query>
+                    ||= 0x01 <String> <Meta tag name>
+                    ||= 0x02 <Meta tag>
+                    ||= 0x03 DWORD <Minmax> <Meta tag name>
+<Operator>          ::= 0x00     // and
+                    ||= 0x01     // or
+                    ||= 0x02     // and not
+<Minmax>            ::= 0x01     // min
+                    ||= 0x02     // max
+
+<File info list>    ::= DWORD <File info>*
+<File info>         ::= <File hash> <Client ID> <Port> <Meta list>
+<Server info>       ::= HASH <Server IP> <Port> <Meta list>
+<Client info list>  ::= DWORD <Client info>*
+<Client info>       ::= HASH <Client ID> <Port> <Meta list>
+
+<Meta tag list>     ::= DWORD <Meta tag>*
+<Meta tag>          ::= 0x02 <Meta tag name> DWORD
+                    ||= 0x03 <Meta tag name> <String>
+                    ||= 0x04 <Meta tag name> FLOAT
+<Meta tag name>     ::= WORD <Special tag>
+                    ||= <String>
+<Special tag>       ::= 0x01        // name, string
+                    ||= 0x02        // size
+                    ||= 0x03        // type, string: Audio, Video, Image, Pro, Doc, Col
+                    ||= 0x04        // format, string: file extension
+                    ||= 0x08        // copied
+                    ||= 0x09 DATA   // gap start, DATA keeps number of gap as string
+                    ||= 0x0a DATA   // gap end, DATA keeps number of gap as string
+                    ||= 0x0b        // description, string
+                    ||= 0x0c        // ping
+                    ||= 0x0d        // fail
+                    ||= 0x0e        // preference
+                    ||= 0x0f        // port
+                    ||= 0x10        // ip
+                    ||= 0x11        // version
+                    ||= 0x12        // tempfile, string
+                    ||= 0x13        // priority
+                    ||= 0x14        // status
+                    ||= 0x15        // availability
+
+<Address list>      ::= BYTE <Address>*
+<Server address>    ::= <Address>
+<Client address>    ::= <Address>
+<Address>           ::= <IP> <Port>
+
+<Part status list>  ::= WORD BYTE*  // number of bytes is WORD/8, 1 bit for each part
+<Part hash list>    ::= WORD HASH*
+<Data range>        ::= <Start offset> <End offset>
+<Start offset>      ::= DWORD
+<End offset>        ::= DWORD
+
+<String>            ::= WORD DATA
+<Client ID>         ::= DWORD   // client IP for high id, or number
+<Nusers>            ::= DWORD
+<Nfiles>            ::= DWORD
+<File hash>         ::= HASH
+<IP>                ::= DWORD
+<Port>              ::= WORD
+
+BYTE    1 byte integer
+WORD    2 bytes integer
+DWORD   4 bytes integer
+FLOAT   4 bytes single float
+HASH    16 bytes MD4 digest
+
+
+2. server.met
+===========================================================
+<server.met>        ::= 0x0e <Server desc list> <Tail>
+<Server desc list>  ::= DWORD <Server desc>*
+<Server desc>       ::= <IP> <Port> <Meta list>
+<Tail>              ::= DATA
+
+NOTE: <Tail> may keep some data as
+28 unhandled bytes at the end:
+  0x11A0 : 6D 61 64 65 20 62 79 20 6F 20 63 20 62 20 20 4D : made.by.o.c.b..M
+  0x11B0 : 20 61 20 75 20 72 20 69 20 63 20 65             : .a.u.r.i.c.e
+
+
+3. part.met
+===========================================================
+<part.met>          ::= 0xe0 <File status>
+<File status>       ::= <Date> <File hash> <Part hash list> <Meta list>
+
+
+4. known.met
+===========================================================
+<part.met>          ::= 0x0e <File status list>
+<File status list>  ::= DWORD <File status>*
+
+
+5. pref.met
+===========================================================
+<pref.met>          ::= <Address> HASH <Meta list> <Preferencies>
+<Preferencies>      ::= <Meta list>
+
+
+6. Changes
+===========================================================
+
+0.3   Tue Oct  8 17:50:28 MSD 2002
+    - added format for *.met files.
+0.2
+    - merged information from mldonkey.
+0.1
+    - started document from some public info and dumped packets.
+
+
